@@ -596,16 +596,6 @@ create_label(p_calc, "KDV %:", fg=THEME["accent_orange"]).grid(row=2, column=0, 
 entry_kdv = create_entry(p_calc, 5, "center"); entry_kdv.grid(row=2, column=1, pady=2); entry_kdv.insert(0, "20")
 create_button(p_calc, "HESAPLA", hesapla, THEME["accent_orange"], width=12).grid(row=3, column=0, columnspan=2, pady=(5,0))
 
-try:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    img_path = os.path.join(script_dir, "Bursa Elif Makina Logo.png")
-    logo_raw = tk.PhotoImage(file=img_path)
-    logo_resized = logo_raw.subsample(3, 3) 
-    lbl_logo = tk.Label(p_calc, image=logo_resized, bg=THEME["bg_panel"])
-    lbl_logo.image = logo_resized 
-    lbl_logo.grid(row=4, column=0, columnspan=2, pady=(15, 5))
-except: pass
-
 f_res = tk.Frame(f_foot, bg=THEME["bg_panel"]); f_res.pack(side="right", fill="both", expand=True)
 def create_res_card(parent, title, bg):
     c = tk.Frame(parent, bg=bg, padx=10, pady=10, bd=1, relief="solid")
