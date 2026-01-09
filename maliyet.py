@@ -10,6 +10,11 @@ import json
 import os
 import locale
 import subprocess
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib import colors
 
 # Türkçe yerel ayarları
 try: locale.setlocale(locale.LC_ALL, 'tr_TR.UTF-8')
@@ -21,12 +26,15 @@ except:
 THEME = {
     "bg_main": "#F5F7F9",       
     "bg_panel": "#FFFFFF",      
-    "bg_header": "#263238",     
+    "bg_header": "#162232",     
     "fg_header": "#FFFFFF",     
     "fg_text": "#455A64",       
     "fg_muted": "#90A4AE",      
-    "accent_blue": "#1976D2",   
+    "accent_blue": "#1976D2",
+    "accent_yellow": "#FBC02D", 
     "accent_green": "#388E3C",  
+    "accent_teal": "#00897B",   
+    "accent_pink": "#D81B60",   
     "accent_red": "#D32F2F",    
     "accent_orange": "#F57C00", 
     "accent_purple": "#7B1FA2", 
@@ -180,6 +188,76 @@ def projeyi_yukle():
         messagebox.showinfo("Yüklendi", "Proje verileri geri yüklendi.")
     except Exception as e: messagebox.showerror("Hata", f"Dosya yüklenemedi: {e}")
 
+# --- YENİ EKLENTİ: GEÇMİŞ PENCERESİ FONKSİYONLARI ---
+def gecmisi_goster():
+    """Tüm kayıtlı projeleri listeleyen bir pencere açar."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    teklifler_dir = os.path.join(base_dir, "TEKLIFLER")
+    
+    if not os.path.exists(teklifler_dir):
+        messagebox.showinfo("Bilgi", "Henüz hiç kayıtlı teklif yok.")
+        return
+
+    # Popup Pencere
+    top = tk.Toplevel(app)
+    top.title("Teklif Geçmişi")
+    top.geometry("600x400")
+    top.configure(bg=THEME["bg_main"])
+
+    tk.Label(top, text="Kayıtlı Projeler (Çift Tıklayarak Aç)", font=FONT_HEADER_TITLE, bg=THEME["bg_main"]).pack(pady=10)
+
+    # Liste Kutusu ve Scrollbar
+    frame_list = tk.Frame(top)
+    frame_list.pack(fill="both", expand=True, padx=10, pady=5)
+    
+    scrollbar = ttk.Scrollbar(frame_list)
+    scrollbar.pack(side="right", fill="y")
+    
+    listbox = tk.Listbox(frame_list, font=FONT_LABEL, yscrollcommand=scrollbar.set, height=15)
+    listbox.pack(side="left", fill="both", expand=True)
+    scrollbar.config(command=listbox.yview)
+
+    # Dosyaları Bul ve Listele
+    bulunan_dosyalar = [] 
+    for root, dirs, files in os.walk(teklifler_dir):
+        for file in files:
+            if file.endswith(".json"):
+                full_path = os.path.join(root, file)
+                display_name = f"{os.path.basename(root)}  >>>  {file}"
+                listbox.insert("end", display_name)
+                bulunan_dosyalar.append(full_path)
+
+    def secileni_yukle(event):
+        secim_index = listbox.curselection()
+        if not secim_index: return
+        dosya_yolu = bulunan_dosyalar[secim_index[0]]
+        yukle_from_path(dosya_yolu) # Helper fonksiyonu çağır
+        top.destroy() 
+
+    listbox.bind("<Double-Button-1>", secileni_yukle)
+
+def yukle_from_path(dosya_yolu):
+    """Verilen dosya yolundan projeyi yükler (Helper)."""
+    try:
+        with open(dosya_yolu, "r", encoding="utf-8") as f: veri = json.load(f)
+        
+        meta = veri.get("metadata", {})
+        entry_proje_adi.delete(0, 'end'); entry_proje_adi.insert(0, meta.get("proje_adi", ""))
+        entry_musteri.delete(0, 'end'); entry_musteri.insert(0, meta.get("musteri", ""))
+        entry_kur_usd.delete(0, 'end'); entry_kur_usd.insert(0, meta.get("kur_usd", "35.50"))
+        entry_kur_eur.delete(0, 'end'); entry_kur_eur.insert(0, meta.get("kur_eur", "38.20"))
+        
+        entry_kar_malzeme.delete(0, 'end'); entry_kar_malzeme.insert(0, meta.get("kar_malzeme", "30"))
+        entry_kar_iscilik.delete(0, 'end'); entry_kar_iscilik.insert(0, meta.get("kar_iscilik", "60"))
+        entry_kdv.delete(0, 'end'); entry_kdv.insert(0, meta.get("kdv", "20"))
+
+        global proje_verileri
+        proje_verileri = veri.get("items", [])
+        tabloyu_guncelle()
+        hesapla()
+        messagebox.showinfo("Yüklendi", "Proje başarıyla yüklendi.")
+    except Exception as e: messagebox.showerror("Hata", f"Yüklenemedi: {e}")
+
 def excele_aktar():
     if not proje_verileri: messagebox.showwarning("Uyarı", "Liste boş."); return
     klasor_yolu, dosya_adi = klasor_hazirla()
@@ -208,6 +286,160 @@ def excele_aktar():
         if messagebox.askyesno("Excel Hazır", f"Dosya oluşturuldu:\n{tam_yol}\n\nKlasörü açmak ister misiniz?"): dosya_konumunu_ac()
     except Exception as e: messagebox.showerror("Hata", str(e))
 
+# --- PDF OLUŞTURMA MOTORU (SADECE USD) ---
+def pdf_olustur_ve_ac():
+    if not proje_verileri:
+        messagebox.showwarning("Uyarı", "Liste boş, PDF oluşturulamaz.")
+        return
+
+    # 1. Klasör ve Dosya Ayarı
+    klasor_yolu, dosya_adi = klasor_hazirla()
+    if not klasor_yolu: return
+    pdf_dosya_yolu = os.path.join(klasor_yolu, f"{dosya_adi}.pdf")
+
+    try:
+        # Kurları Al (Hesaplama için lazım)
+        try:
+            kur_usd = float(entry_kur_usd.get().replace(',', '.'))
+            kur_eur = float(entry_kur_eur.get().replace(',', '.'))
+            kdv_orani = float(entry_kdv.get().replace(',', '.'))
+        except:
+            messagebox.showerror("Hata", "Kur veya KDV değerleri hatalı.")
+            return
+
+        # 2. PDF Başlat
+        c = canvas.Canvas(pdf_dosya_yolu, pagesize=A4)
+        genislik, yukseklik = A4
+        
+        # Font Ayarları
+        try:
+            pdfmetrics.registerFont(TTFont('Arial', 'arial.ttf'))
+            pdfmetrics.registerFont(TTFont('Arial-Bold', 'arialbd.ttf'))
+            font_normal = 'Arial'; font_bold = 'Arial-Bold'
+        except:
+            font_normal = 'Helvetica'; font_bold = 'Helvetica-Bold'
+
+        # --- TASARIM ---
+        
+        # LOGO
+        try:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            img_path = os.path.join(script_dir, "Bursa Elif Makina Logo.png")
+            c.drawImage(img_path, 30, yukseklik - 100, width=150, height=80, mask='auto', preserveAspectRatio=True)
+        except: pass
+
+        # BAŞLIKLAR
+        c.setFont(font_bold, 16)
+        c.drawRightString(genislik - 30, yukseklik - 50, "MALİYET RAPORU")
+        
+        c.setFont(font_normal, 10)
+        c.drawRightString(genislik - 30, yukseklik - 70, f"Tarih: {datetime.now().strftime('%d.%m.%Y')}")
+        
+        # MÜŞTERİ KUTUSU
+        c.setLineWidth(1)
+        c.rect(30, yukseklik - 150, genislik - 60, 40)
+        
+        c.setFont(font_bold, 10)
+        c.drawString(40, yukseklik - 125, "FİRMA:")
+        c.drawString(40, yukseklik - 140, "PROJE:")
+        
+        c.setFont(font_normal, 10)
+        c.drawString(100, yukseklik - 125, entry_musteri.get())
+        c.drawString(100, yukseklik - 140, entry_proje_adi.get())
+
+        # --- TABLO BAŞLIKLARI ---
+        y = yukseklik - 180
+        satir_h = 20
+        
+        c.setFillColorRGB(0.9, 0.9, 0.9)
+        c.rect(30, y, genislik - 60, satir_h, fill=1)
+        c.setFillColorRGB(0, 0, 0)
+
+        c.setFont(font_bold, 9)
+        c.drawString(35, y + 6, "KATEGORİ")
+        c.drawString(150, y + 6, "ÜRÜN / AÇIKLAMA")
+        c.drawString(350, y + 6, "MİKTAR")
+        c.drawString(420, y + 6, "BİRİM FİYAT ($)") # Başlık değişti
+        c.drawString(500, y + 6, "TUTAR ($)")       # Başlık değişti
+
+        y -= satir_h
+
+        # --- TABLO İÇERİĞİ VE HESAPLAMA ---
+        c.setFont(font_normal, 9)
+        toplam_teklif_usd = 0 # Toplamı burada biriktireceğiz
+
+        for veri in proje_verileri:
+            if y < 100: # Sayfa sonu
+                c.showPage(); y = yukseklik - 50; c.setFont(font_normal, 9)
+
+            # HER ŞEYİ USD'YE ÇEVİRME MANTIĞI
+            orj_fiyat = veri['birim_fiyat']
+            para = veri['para']
+            
+            # Birim fiyatı USD'ye çevir
+            if para == "TL": birim_fiyat_usd = orj_fiyat / kur_usd
+            elif para == "EUR": birim_fiyat_usd = (orj_fiyat * kur_eur) / kur_usd
+            else: birim_fiyat_usd = orj_fiyat
+            
+            # Satır tutarını hesapla
+            satir_tutar_usd = birim_fiyat_usd * veri['miktar']
+            toplam_teklif_usd += satir_tutar_usd
+
+            # Ekrana Yazdır
+            urun_adi = veri["urun"][:35] + "..." if len(veri["urun"]) > 35 else veri["urun"]
+            
+            c.drawString(35, y + 6, veri["kategori"])
+            c.drawString(150, y + 6, urun_adi)
+            c.drawString(350, y + 6, f"{veri['miktar']:g} {veri['birim']}")
+            # Formatlarken format_para kullanıyoruz
+            c.drawString(420, y + 6, f"${format_para(birim_fiyat_usd)}") 
+            c.drawString(500, y + 6, f"${format_para(satir_tutar_usd)}")
+            
+            c.setStrokeColorRGB(0.8, 0.8, 0.8)
+            c.line(30, y, genislik - 30, y)
+            c.setStrokeColorRGB(0, 0, 0)
+            y -= satir_h
+
+        # --- TOPLAMLAR (HİZALI VE EŞİT PUNTO) ---
+        # KDV Hesabı
+        kdv_tutari = toplam_teklif_usd * (kdv_orani / 100)
+        genel_toplam = toplam_teklif_usd + kdv_tutari
+
+        y -= 30 # Tablodan biraz daha aşağı inelim
+        
+        # 1. Ortak Font ve Boyut Ayarı (İkisi de Bold ve 10 Punto)
+        c.setFont(font_bold, 10)
+        
+        # 2. Sabit Sütun Başlangıç Noktaları (X Koordinatları)
+        # Bu değerlerle oynayarak sağa/sola kaydırabilirsin
+        x_etiket = genislik - 280  # "Ara Toplam..." yazısının başladığı yer
+        x_para   = genislik - 100  # "$13.000..." parasının başladığı yer
+
+        # 3. Ara Toplam Satırı
+        c.drawString(x_etiket, y, "ARA TOPLAM (KDV HARİÇ):")
+        c.drawString(x_para,   y, f"${format_para(toplam_teklif_usd)}")
+        
+        # 4. Genel Toplam Satırı
+        y -= 15 # Alt satıra geçiş boşluğu
+        c.drawString(x_etiket, y, "GENEL TOPLAM (KDV DAHİL):")
+        c.drawString(x_para,   y, f"${format_para(genel_toplam)}")
+
+        # --- ALT BİLGİ ---
+        y -= 60
+        c.setFont(font_normal, 8)
+        c.drawString(30, y, "* Fiyatlarımıza KDV dahildir (Yukarıda belirtilmiştir).")
+        c.drawString(30, y - 10, "* Ödeme günü döviz kuru (TCMB Efektif Satış) geçerlidir.")
+        
+        c.setFont(font_bold, 10)
+        c.drawString(genislik - 150, y, "BURSA ELİF MAKİNA")
+        c.drawString(genislik - 150, y - 15, "Kaşe / İmza")
+
+        c.save()
+        os.startfile(pdf_dosya_yolu)
+
+    except Exception as e:
+        messagebox.showerror("Hata", f"PDF Oluşturulamadı:\n{e}")
+
 def dosya_konumunu_ac():
     klasor_yolu, _ = klasor_hazirla()
     if klasor_yolu and os.path.exists(klasor_yolu): os.startfile(klasor_yolu)
@@ -224,7 +456,7 @@ def oto_kayit_dongusu(interval_ms):
     if entry_proje_adi.get() and entry_musteri.get():
         projeyi_kaydet(sessiz=True)
         # Konsola zaman damgası bas (Test için, kullanıcı görmez)
-        print(f"Oto-Kayıt Yapıldı: {datetime.now().strftime('%H:%M:%S')}")
+        print(f"Otomatik Kayıt Yapıldı: {datetime.now().strftime('%H:%M:%S')}")
     
     # Bir sonraki kaydı planla
     oto_kayit_job = app.after(interval_ms, lambda: oto_kayit_dongusu(interval_ms))
@@ -241,7 +473,7 @@ def oto_kayit_ayar_degisti(event=None):
     secim = cmb_oto_kayit.get()
     
     if secim == "Kapalı":
-        print("Oto-Kayıt Durduruldu.")
+        print("Otomatik Kayıt Durduruldu.")
         return
 
     # Süreye çevir (Milisaniye)
@@ -252,7 +484,7 @@ def oto_kayit_ayar_degisti(event=None):
     elif secim == "5 Dakika": ms = 300000
     
     # Yeni döngüyü başlat
-    print(f"Oto-Kayıt Başladı: {secim}")
+    print(f"Otomatik Kayıt Başladı: {secim}")
     oto_kayit_dongusu(ms)
 
 # --- İŞLEMLER ---
@@ -390,20 +622,19 @@ def listeden_sil_buton():
         if messagebox.askyesno("Sil", f"'{secilen_urun}' veritabanından silinsin mi?"):
             katalog[secilen_kat].remove(secilen_urun); katalog_kaydet(katalog); cmb_urun['values'] = katalog[secilen_kat]; cmb_urun.set("")
 
-# --- ARAYÜZ ---
+#ARAYÜZ ----------------------------------------
+
 app = tk.Tk()
 app.title("Bursa Elif Makina - Teklif Hazırlama")
 app.geometry("1350x950")
 app.configure(bg=THEME["bg_main"])
 
-# Stil
 style = ttk.Style(); style.theme_use('clam')
 style.configure(".", background=THEME["bg_main"], foreground=THEME["fg_text"], font=FONT_LABEL)
 style.configure("Treeview", font=FONT_LABEL, rowheight=28)
 style.configure("Treeview.Heading", font=FONT_BTN, background=THEME["bg_main"])
 style.configure("TCombobox", padding=5)
 
-# Özel Widget'lar
 def create_label(parent, text, font=FONT_LABEL, fg=THEME["fg_text"], bg=THEME["bg_panel"]):
     return tk.Label(parent, text=text, font=font, fg=fg, bg=bg)
 def create_entry(parent, width, justify="left"):
@@ -413,67 +644,46 @@ def create_button(parent, text, command, bg, width=None):
     if width: btn.config(width=width)
     return btn
 
-# --- HEADER (TEMİZLENDİ) ---
-# --- HEADER (MANUEL DÜZENLENMİŞ - 3 PARÇALI) ---
 frame_head = tk.Frame(app, bg=THEME["bg_header"], pady=15, padx=20)
 frame_head.pack(fill="x")
 
-# 1. SOL GRUP (KUTU) OLUŞTURMA
-# Bu kutuyu sola yaslıyoruz (side="left")
 f_left = tk.Frame(frame_head, bg=THEME["bg_header"])
 f_left.pack(side="left")
 
-# Sol kutunun içini dolduralım:
 create_label(f_left, "PROJE ADI:", FONT_BTN, THEME["fg_header"], THEME["bg_header"]).pack(side="left")
-entry_proje_adi = create_entry(f_left, width=20) # Genişlik
-entry_proje_adi.pack(side="left", padx=(5, 15)) # padx=(Sol boşluk, Sağ boşluk)
+entry_proje_adi = create_entry(f_left, width=20) 
+entry_proje_adi.pack(side="left", padx=(5, 15)) 
 entry_proje_adi.insert(0, "Yeni Proje")
 
 create_label(f_left, "MÜŞTERİ:", FONT_BTN, THEME["fg_header"], THEME["bg_header"]).pack(side="left")
 entry_musteri = create_entry(f_left, width=20)
 entry_musteri.pack(side="left", padx=5)
 
-
-# 2. SAĞ GRUP (KUTU) OLUŞTURMA
-# Bu kutuyu sağa yaslıyoruz (side="right")
 f_right = tk.Frame(frame_head, bg=THEME["bg_header"])
 f_right.pack(side="right")
 
-# Sağ kutunun içini dolduralım (DİKKAT: side="right" olduğu için kodda İLK yazılan EN SAĞDA durur)
-# Sıralama isteğin: [USD] [EUR] [TİK] (Ekranın en sağı)
-# Bu yüzden kod yazma sıramız: TİK -> EUR -> USD olmalı.
-
-# En sağdaki Tik işareti
 lbl_durum = create_label(f_right, "...", ("Segoe UI", 14), "white", THEME["bg_header"])
 lbl_durum.pack(side="right", padx=(10, 0)) 
 
-# Onun soluna EUR
 entry_kur_eur = create_entry(f_right, width=7, justify="center")
 entry_kur_eur.pack(side="right", padx=2)
 entry_kur_eur.insert(0, "38.20")
 create_label(f_right, "EUR", FONT_BTN, "#FFC107", THEME["bg_header"]).pack(side="right", padx=(10, 2))
 
-# Onun soluna USD
 entry_kur_usd = create_entry(f_right, width=7, justify="center")
 entry_kur_usd.pack(side="right", padx=2)
 entry_kur_usd.insert(0, "35.50")
 create_label(f_right, "USD", FONT_BTN, "#4CAF50", THEME["bg_header"]).pack(side="right", padx=(5, 2))
 
-
-# 3. ORTA GRUP (KUTU) OLUŞTURMA
-# Sol ve Sağ kutular yerleşti. Kalan boşluğa bunu koyuyoruz.
-# expand=True diyerek boşluğu yaymasını sağlıyoruz.
 f_center = tk.Frame(frame_head, bg=THEME["bg_header"])
 f_center.pack(side="left", expand=True) 
 
-# Orta kutunun içini dolduralım:
-create_label(f_center, "Oto-Kayıt:", FONT_BTN, "#90A4AE", THEME["bg_header"]).pack(side="left", padx=5)
-cmb_oto_kayit = ttk.Combobox(f_center, values=["Kapalı", "30 Saniye", "1 Dakika", "2 Dakika", "5 Dakika"], state="readonly", width=12)
+create_label(f_center, "Otomatik Kayıt:", FONT_BTN, "#FFFFFF", THEME["bg_header"]).pack(side="left", padx=5)
+cmb_oto_kayit = ttk.Combobox(f_center, values=["Kapalı", "30 Saniye", "1 Dakika", "2 Dakika", "5 Dakika"], state="readonly", width=14)
 cmb_oto_kayit.current(0)
 cmb_oto_kayit.pack(side="left")
 cmb_oto_kayit.bind("<<ComboboxSelected>>", oto_kayit_ayar_degisti)
 
-# --- GİRİŞ BLOKLARI ---
 frame_input = tk.Frame(app, bg=THEME["bg_main"]); frame_input.pack(fill="x", padx=15, pady=10)
 
 def create_input_panel(parent, title):
@@ -521,12 +731,9 @@ entry_isci_ucret = create_entry(f_p3_sub, 9, "right"); entry_isci_ucret.pack(sid
 cmb_isci_para = ttk.Combobox(f_p3_sub, values=["TL", "USD", "EUR"], width=5, state="readonly"); cmb_isci_para.current(0); cmb_isci_para.pack(side="left")
 create_button(p3, "EKLE (+)", iscelik_ekle, THEME["accent_blue"]).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(10,0))
 
-# --- LİSTE KONTROL ---
-# --- LİSTE KONTROL (MANUEL AYARLI) ---
 f_ctrl = tk.Frame(app, bg=THEME["bg_main"], pady=10, padx=20)
 f_ctrl.pack(fill="x")
 
-# 1. SOL TARAFA FİLTREYİ KOYALIM
 f_left = tk.Frame(f_ctrl, bg=THEME["bg_main"])
 f_left.pack(side="left")
 
@@ -535,40 +742,20 @@ cmb_filtre = ttk.Combobox(f_left, values=["Tümü", "Sadece Malzeme", "Sadece İ
 cmb_filtre.current(0); cmb_filtre.pack(side="left", padx=5)
 cmb_filtre.bind("<<ComboboxSelected>>", lambda e: tabloyu_guncelle())
 
-
-# 2. SAĞ TARAFA BUTON GRUBU İÇİN ÖZEL BİR KUTU AÇALIM
 f_buttons = tk.Frame(f_ctrl, bg=THEME["bg_main"])
 f_buttons.pack(side="right")
 
-# ============================================================
-# AYAR KÖŞKÜ (BURAYI DEĞİŞTİREREK HEPSİNİ YÖNETEBİLİRSİN)
-# ============================================================
-BTN_GENISLIK = 16   # Butonların uzunluğu (Karakter sayısı)
-BTN_BOSLUK   = 5    # Butonlar arasındaki boşluk (Piksel)
-# ============================================================
+BTN_GENISLIK = 14   
+BTN_BOSLUK   = 5    
 
-# Butonları sağdan sola doğru diziyoruz (pack side="right" olduğu için ters sıra)
-# Sıra: [Klasör] [Kaydet] [Yükle] [Excel] [Sıfırla] [Sil] -> Ekranda böyle görünür.
-
-# 1. En Sağdaki: Klasör Aç
-create_button(f_buttons, "Klasörü Aç 📂", dosya_konumunu_ac, THEME["accent_grey"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
-
-# 2. Projeyi Kaydet
-create_button(f_buttons, "Projeyi Kaydet", lambda: projeyi_kaydet(False), THEME["accent_purple"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
-
-# 3. Projeyi Yükle
-create_button(f_buttons, "Projeyi Yükle", projeyi_yukle, THEME["accent_purple"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
-
-# 4. Excel Oluştur
+create_button(f_buttons, "Klasörü Aç", dosya_konumunu_ac, THEME["accent_grey"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
+create_button(f_buttons, "Teklif Geçmişi", gecmisi_goster, THEME["accent_blue"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
+create_button(f_buttons, "Projeyi Kaydet", lambda: projeyi_kaydet(False), THEME["accent_yellow"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
+create_button(f_buttons, "PDF Oluştur", pdf_olustur_ve_ac, THEME["accent_pink"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
 create_button(f_buttons, "Excel Oluştur", excele_aktar, THEME["accent_green"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
-
-# 5. Sıfırla
 create_button(f_buttons, "Sıfırla", sifirla, THEME["accent_red"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
-
-# 6. Sil (En solda kalan)
 create_button(f_buttons, "Sil", sil, THEME["accent_orange"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
 
-# --- LİSTE ---
 f_list = tk.Frame(app, bg=THEME["bg_main"]); f_list.pack(fill="both", expand=True, padx=15, pady=(0,10))
 scroll = ttk.Scrollbar(f_list); scroll.pack(side="right", fill="y")
 cols = ("k", "u", "m", "f", "p", "t", "ht", "gbf") 
@@ -581,7 +768,6 @@ for col, t, w in zip(cols, headers, widths):
     tablo.column(col, width=w, anchor="w" if col in ["k","u"] else "center")
 tablo.column("ht", width=0, stretch=False); tablo.column("gbf", width=0, stretch=False)
 
-# --- ALT PANEL ---
 f_foot = tk.Frame(app, bg=THEME["bg_panel"], padx=15, pady=10); f_foot.pack(fill="x", side="bottom")
 
 p_calc = tk.LabelFrame(f_foot, text="Hesaplama", bg=THEME["bg_panel"], font=FONT_HEADER_TITLE, padx=10, pady=5)
