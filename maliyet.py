@@ -53,8 +53,12 @@ FONT_RES_VAL = ("Consolas", 10)
 FONT_TOTAL = ("Consolas", 11, "bold")        
 
 # --- GLOBAL DEĞİŞKENLER ---
+# --- GLOBAL DEĞİŞKENLER ---
+# --- GLOBAL DEĞİŞKENLER ---
 proje_verileri = []
-oto_kayit_job = None # Otomatik kayıt zamanlayıcısı
+oto_kayit_job = None 
+ANA_KAYIT_YOLU = None  # (Bunu önceki adımda eklemiştik)
+ACIK_DOSYA_YOLU = None # <-- YENİ: Bunu ekle (Açık olan dosyanın adresini tutacak)
 
 # --- KATALOG ---
 varsayilan_katalog = {
@@ -112,15 +116,27 @@ def temizle_dosya_adi(isim):
     return re.sub(r'[\\/*?:<>|]', '_', str(isim).strip())
 
 def klasor_hazirla():
+    global ANA_KAYIT_YOLU
+    
     proje = entry_proje_adi.get()
     musteri = entry_musteri.get()
-    if not proje or not musteri: return None, None # Sessizce dön
+    if not proje or not musteri: return None, None 
 
     proje_clean = temizle_dosya_adi(proje)
     musteri_clean = temizle_dosya_adi(musteri)
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    teklifler_dir = os.path.join(base_dir, "TEKLIFLER")
-    hedef_klasor = os.path.join(teklifler_dir, f"{musteri_clean} - {proje_clean}")
+
+    # Eğer henüz bir ana klasör seçilmediyse soralım
+    if ANA_KAYIT_YOLU is None:
+        messagebox.showinfo("Konum Seçimi", "Lütfen projelerin kaydedileceği ANA KLASÖRÜ seçiniz.")
+        secilen_yol = filedialog.askdirectory(title="Projelerin Kaydedileceği Ana Klasörü Seç")
+        
+        if secilen_yol:
+            ANA_KAYIT_YOLU = secilen_yol
+        else:
+            return None, None # Seçim iptal edildiyse işlem yapma
+
+    # Seçilen klasörün içine "Müşteri - Proje" klasörü aç
+    hedef_klasor = os.path.join(ANA_KAYIT_YOLU, f"{musteri_clean} - {proje_clean}")
     
     try:
         os.makedirs(hedef_klasor, exist_ok=True)
@@ -142,19 +158,48 @@ def proje_verilerini_topla():
     }
 
 def projeyi_kaydet(sessiz=False):
-    """Hem manuel hem otomatik kayıt için ortak fonksiyon"""
+    global ACIK_DOSYA_YOLU, ANA_KAYIT_YOLU
+    
+    # 1. Klasör ve İsim Hesapla
     klasor_yolu, dosya_adi = klasor_hazirla()
     if not klasor_yolu: 
         if not sessiz: messagebox.showwarning("Eksik Bilgi", "Proje Adı ve Müşteri giriniz.")
         return False
     
-    tam_yol = os.path.join(klasor_yolu, f"{dosya_adi}.json")
+    yeni_tam_yol = os.path.join(klasor_yolu, f"{dosya_adi}.json")
     veri = proje_verilerini_topla()
     
     try:
-        with open(tam_yol, "w", encoding="utf-8") as f:
+        # --- AKILLI KAYIT MANTIĞI ---
+        # Eğer zaten açık bir dosya varsa ve yolu yeni hesaplanan yolla aynıysa direkt üstüne yaz
+        if ACIK_DOSYA_YOLU and os.path.exists(ACIK_DOSYA_YOLU):
+            if ACIK_DOSYA_YOLU == yeni_tam_yol:
+                # Yol aynı, direkt üzerine yaz (Sorun yok)
+                pass
+            else:
+                # Yol farklı! Demek ki kullanıcı Proje Adını veya Müşteriyi değiştirdi.
+                # Eski dosyayı silip, yeni isimle mi kaydedelim? Yoksa kopya mı oluşturalım?
+                # Kullanıcı "yeni dosya oluşmasın" dediği için ESKİSİNİ SİLİP YENİSİNİ YAZACAĞIZ.
+                
+                cevap = messagebox.askyesno("İsim Değişikliği", 
+                                            f"Proje adı değişmiş görünüyor.\n\n"
+                                            f"Eski Dosya: {os.path.basename(ACIK_DOSYA_YOLU)}\n"
+                                            f"Yeni Dosya: {dosya_adi}.json\n\n"
+                                            f"Eski dosyayı silip ismini değiştirerek mi kaydedilsin?\n"
+                                            f"(Hayır derseniz eski dosya kalır, yeni bir kopya oluşur.)")
+                
+                if cevap: # Evet derse eskisini sil
+                    try: os.remove(ACIK_DOSYA_YOLU)
+                    except: pass
+        
+        # Dosyayı Kaydet
+        with open(yeni_tam_yol, "w", encoding="utf-8") as f:
             json.dump(veri, f, ensure_ascii=False, indent=4)
-        if not sessiz: messagebox.showinfo("Kaydedildi", f"Proje kaydedildi:\n{tam_yol}")
+            
+        # Kaydettikten sonra açık dosya yolunu güncelle
+        ACIK_DOSYA_YOLU = yeni_tam_yol 
+        
+        if not sessiz: messagebox.showinfo("Kaydedildi", f"Proje kaydedildi:\n{dosya_adi}")
         return True
     except Exception as e:
         if not sessiz: messagebox.showerror("Hata", f"Kaydedilemedi: {e}")
@@ -191,12 +236,15 @@ def projeyi_yukle():
 # --- YENİ EKLENTİ: GEÇMİŞ PENCERESİ FONKSİYONLARI ---
 def gecmisi_goster():
     """Tüm kayıtlı projeleri listeleyen bir pencere açar."""
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    teklifler_dir = os.path.join(base_dir, "TEKLIFLER")
+    global ANA_KAYIT_YOLU
     
-    if not os.path.exists(teklifler_dir):
-        messagebox.showinfo("Bilgi", "Henüz hiç kayıtlı teklif yok.")
-        return
+    # Eğer henüz klasör seçilmediyse sor
+    if ANA_KAYIT_YOLU is None:
+        secilen_yol = filedialog.askdirectory(title="Projelerin Bulunduğu Klasörü Göster")
+        if secilen_yol:
+            ANA_KAYIT_YOLU = secilen_yol
+        else:
+            return # Seçmezse açma
 
     # Popup Pencere
     top = tk.Toplevel(app)
@@ -204,7 +252,8 @@ def gecmisi_goster():
     top.geometry("600x400")
     top.configure(bg=THEME["bg_main"])
 
-    tk.Label(top, text="Kayıtlı Projeler (Çift Tıklayarak Aç)", font=FONT_HEADER_TITLE, bg=THEME["bg_main"]).pack(pady=10)
+    tk.Label(top, text=f"Konum: {ANA_KAYIT_YOLU}", font=("Segoe UI", 8), bg=THEME["bg_main"], fg="grey").pack(pady=2)
+    tk.Label(top, text="Kayıtlı Projeler (Çift Tıklayarak Aç)", font=FONT_HEADER_TITLE, bg=THEME["bg_main"]).pack(pady=5)
 
     # Liste Kutusu ve Scrollbar
     frame_list = tk.Frame(top)
@@ -219,11 +268,14 @@ def gecmisi_goster():
 
     # Dosyaları Bul ve Listele
     bulunan_dosyalar = [] 
-    for root, dirs, files in os.walk(teklifler_dir):
+    
+    for root, dirs, files in os.walk(ANA_KAYIT_YOLU):
         for file in files:
-            if file.endswith(".json"):
+            if file.endswith(".json") and file != "katalog.json": # Katalog dosyasını listeleme
                 full_path = os.path.join(root, file)
-                display_name = f"{os.path.basename(root)}  >>>  {file}"
+                # Klasör ismini göster ki hangi müşteri olduğu anlaşılsın
+                parent_folder = os.path.basename(root)
+                display_name = f"{parent_folder}  >>>  {file}"
                 listbox.insert("end", display_name)
                 bulunan_dosyalar.append(full_path)
 
@@ -231,13 +283,15 @@ def gecmisi_goster():
         secim_index = listbox.curselection()
         if not secim_index: return
         dosya_yolu = bulunan_dosyalar[secim_index[0]]
-        yukle_from_path(dosya_yolu) # Helper fonksiyonu çağır
+        yukle_from_path(dosya_yolu)
         top.destroy() 
 
     listbox.bind("<Double-Button-1>", secileni_yukle)
 
 def yukle_from_path(dosya_yolu):
     """Verilen dosya yolundan projeyi yükler (Helper)."""
+    global ACIK_DOSYA_YOLU  # <-- BU ÇOK ÖNEMLİ (Hafızaya almak için)
+    
     try:
         with open(dosya_yolu, "r", encoding="utf-8") as f: veri = json.load(f)
         
@@ -253,6 +307,11 @@ def yukle_from_path(dosya_yolu):
 
         global proje_verileri
         proje_verileri = veri.get("items", [])
+        
+        # --- HAFIZAYA ALMA KISMI ---
+        ACIK_DOSYA_YOLU = dosya_yolu  # Dosyanın nerede olduğunu kaydettik
+        # ---------------------------
+
         tabloyu_guncelle()
         hesapla()
         messagebox.showinfo("Yüklendi", "Proje başarıyla yüklendi.")
@@ -749,6 +808,7 @@ BTN_GENISLIK = 14
 BTN_BOSLUK   = 5    
 
 create_button(f_buttons, "Klasörü Aç", dosya_konumunu_ac, THEME["accent_grey"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
+create_button(f_buttons, "Projeyi Yükle", projeyi_yukle, THEME["accent_purple"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
 create_button(f_buttons, "Teklif Geçmişi", gecmisi_goster, THEME["accent_blue"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
 create_button(f_buttons, "Projeyi Kaydet", lambda: projeyi_kaydet(False), THEME["accent_yellow"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
 create_button(f_buttons, "PDF Oluştur", pdf_olustur_ve_ac, THEME["accent_pink"], width=BTN_GENISLIK).pack(side="right", padx=BTN_BOSLUK)
