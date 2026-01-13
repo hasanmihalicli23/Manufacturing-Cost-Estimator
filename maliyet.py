@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 import xml.etree.ElementTree as ET
 import threading
@@ -53,14 +53,14 @@ FONT_RES_VAL = ("Consolas", 10)
 FONT_TOTAL = ("Consolas", 11, "bold")        
 
 # --- GLOBAL DEĞİŞKENLER ---
-# --- GLOBAL DEĞİŞKENLER ---
-# --- GLOBAL DEĞİŞKENLER ---
 proje_verileri = []
 oto_kayit_job = None 
-ANA_KAYIT_YOLU = None  # (Bunu önceki adımda eklemiştik)
-ACIK_DOSYA_YOLU = None # <-- YENİ: Bunu ekle (Açık olan dosyanın adresini tutacak)
+ANA_KAYIT_YOLU = None  
+ACIK_DOSYA_YOLU = None 
+AYAR_DOSYASI = "ayarlar.json"
+DOSYA_ADI = "katalog.json"
 
-# --- KATALOG ---
+# --- KATALOG VERİSİ ---
 varsayilan_katalog = {
     "Motorlar": ["Asenkron Motor 0.18 kW", "Asenkron Motor 0.37 kW", "Asenkron Motor 0.55 kW", "Asenkron Motor 1.5 kW", "Servo Motor 750W"],
     "Redüktörler": ["Sonsuz Vida 30 Gövde", "Sonsuz Vida 50 Gövde", "Helisel Dişli", "Planet Redüktör"],
@@ -74,7 +74,6 @@ varsayilan_katalog = {
     "Pnömatik": ["Piston Ø32", "Piston Ø50", "Valf 5/2", "Rekorlar", "Hortum"],
     "Diğer / Özel Giriş": ["Diğer (Manuel Giriş)"]
 }
-DOSYA_ADI = "katalog.json"
 
 # --- YARDIMCI FONKSİYONLAR ---
 def format_para(deger):
@@ -86,28 +85,14 @@ def format_kur_goster(usd_tutar, kur_usd, kur_eur):
     eur_karsilik = (usd_tutar * kur_usd) / kur_eur if kur_eur > 0 else 0
     return f"USD: {format_para(usd_tutar):>10}\nEUR: {format_para(eur_karsilik):>10}\n TL: {format_para(tl_karsilik):>10}"
 
-# --- KATALOG ---
-varsayilan_katalog = {
-    "Motorlar": ["Asenkron Motor 0.18 kW", "Asenkron Motor 0.37 kW", "Asenkron Motor 0.55 kW", "Asenkron Motor 1.5 kW", "Servo Motor 750W"],
-    "Redüktörler": ["Sonsuz Vida 30 Gövde", "Sonsuz Vida 50 Gövde", "Helisel Dişli", "Planet Redüktör"],
-    "Sürücüler": ["Hız Kontrol 0.37 kW", "Hız Kontrol 0.75 kW", "Hız Kontrol 1.5 kW", "Hız Kontrol 2.2 kW"],
-    "Rulmanlar": ["UCFL 204", "UCFL 205", "UCP 204", "6204 ZZ", "Lineer Rulman"],
-    "Konveyör Parçaları": ["Denge Ayağı M10", "Denge Ayağı M12", "Modüler Bant Dişlisi", "Rulo Ø50"],
-    "Hammadde: Saclar": ["DKP Sac 1mm", "DKP Sac 2mm", "Paslanmaz Sac 1mm", "Galvaniz Sac"],
-    "Hammadde: Profiller": ["Kutu Profil 30x30", "Kutu Profil 40x40", "Sigma Profil 30x30", "Sigma Profil 45x45"],
-    "Hammadde: Dolu": ["Lama 30x5", "Lama 40x10", "Transmisyon Mili Ø20", "Civa Çeliği Ø20"],
-    "Civatalar": ["M6 Civata", "M8 Civata", "M10 Civata", "M8 Somun", "M10 Pul"],
-    "Pnömatik": ["Piston Ø32", "Piston Ø50", "Valf 5/2", "Rekorlar", "Hortum"],
-    "Diğer / Özel Giriş": ["Diğer (Manuel Giriş)"]
-}
-DOSYA_ADI = "katalog.json"
+def temizle_dosya_adi(isim):
+    return re.sub(r'[\\/*?:<>|]', '_', str(isim).strip())
 
-# 1. ÖNCE KAYDETME FONKSİYONU (Sıralamayı düzelttik)
+# --- DOSYA VE AYAR YÖNETİMİ ---
 def katalog_kaydet(veri):
     with open(DOSYA_ADI, "w", encoding="utf-8") as f:
         json.dump(veri, f, ensure_ascii=False, indent=4)
 
-# 2. SONRA YÜKLEME FONKSİYONU
 def katalog_yukle():
     if os.path.exists(DOSYA_ADI):
         try:
@@ -121,8 +106,23 @@ def katalog_yukle():
         katalog_kaydet(varsayilan_katalog)
         return varsayilan_katalog
 
-# 3. EN SON: ÇALIŞTIRMA VE ATAMA (Bu satır olmazsa program çöker!)
+# KRİTİK NOKTA: Program açılışında katalog yükleniyor
 katalog = katalog_yukle()
+
+def ayarlari_yukle():
+    global ANA_KAYIT_YOLU
+    if os.path.exists(AYAR_DOSYASI):
+        try:
+            with open(AYAR_DOSYASI, "r", encoding="utf-8") as f:
+                ANA_KAYIT_YOLU = json.load(f).get("kayit_yolu")
+        except: pass
+
+def ayarlari_kaydet():
+    if ANA_KAYIT_YOLU:
+        try:
+            with open(AYAR_DOSYASI, "w", encoding="utf-8") as f:
+                json.dump({"kayit_yolu": ANA_KAYIT_YOLU}, f)
+        except: pass
 
 def tcmb_kur_getir():
     try:
@@ -137,66 +137,26 @@ def tcmb_kur_getir():
             lbl_durum.config(text="✔", fg="#66BB6A") 
         else: lbl_durum.config(text="✘", fg="#EF5350") 
     except: lbl_durum.config(text="✘", fg="#EF5350")
-def baslat_kur_thread(): threading.Thread(target=tcmb_kur_getir).start()
 
-# --- KLASÖR VE DOSYA YÖNETİMİ ---
-def temizle_dosya_adi(isim):
-    return re.sub(r'[\\/*?:<>|]', '_', str(isim).strip())
-
-# --- AYARLAR YÖNETİMİ (YENİ EKLEME) ---
-AYAR_DOSYASI = "ayarlar.json"
-
-def ayarlari_yukle():
-    """Kaydedilmiş ana klasör yolunu hatırlar."""
-    global ANA_KAYIT_YOLU
-    if os.path.exists(AYAR_DOSYASI):
-        try:
-            with open(AYAR_DOSYASI, "r", encoding="utf-8") as f:
-                veri = json.load(f)
-                ANA_KAYIT_YOLU = veri.get("kayit_yolu")
-        except: pass
-
-def ayarlari_kaydet():
-    """Seçilen klasör yolunu hafızaya yazar."""
-    global ANA_KAYIT_YOLU
-    if ANA_KAYIT_YOLU:
-        try:
-            with open(AYAR_DOSYASI, "w", encoding="utf-8") as f:
-                json.dump({"kayit_yolu": ANA_KAYIT_YOLU}, f)
-        except: pass
-
-# --- KLASÖR VE DOSYA YÖNETİMİ (GÜNCELLENDİ) ---
-def temizle_dosya_adi(isim):
-    return re.sub(r'[\\/*?:<>|]', '_', str(isim).strip())
+def baslat_kur_thread(): 
+    threading.Thread(target=tcmb_kur_getir).start()
 
 def klasor_hazirla():
     global ANA_KAYIT_YOLU
-    
-    proje = entry_proje_adi.get()
-    musteri = entry_musteri.get()
+    proje, musteri = entry_proje_adi.get(), entry_musteri.get()
     if not proje or not musteri: return None, None 
 
-    proje_clean = temizle_dosya_adi(proje)
-    musteri_clean = temizle_dosya_adi(musteri)
+    proje_clean, musteri_clean = temizle_dosya_adi(proje), temizle_dosya_adi(musteri)
 
-    # 1. Hafızada yoksa, ayar dosyasından okumayı dene
-    if ANA_KAYIT_YOLU is None:
-        ayarlari_yukle() 
-
-    # 2. Hala yoksa veya yol silinmişse, kullanıcıya sor ve KAYDET
+    if ANA_KAYIT_YOLU is None: ayarlari_yukle() 
     if ANA_KAYIT_YOLU is None or not os.path.exists(ANA_KAYIT_YOLU):
-        messagebox.showinfo("Konum Seçimi", "Lütfen projelerin kaydedileceği ANA KLASÖRÜ seçiniz.\n(Program bunu hatırlayacaktır)")
-        secilen_yol = filedialog.askdirectory(title="Ana Kayıt Klasörünü Seç")
-        
+        messagebox.showinfo("Konum Seçimi", "Projelerin kaydedileceği ana klasörü seçiniz.\n(Program bunu hatırlayacaktır)")
+        secilen_yol = filedialog.askdirectory()
         if secilen_yol:
-            ANA_KAYIT_YOLU = secilen_yol
-            ayarlari_kaydet() # <-- ARTIK UNUTMAYACAK
-        else:
-            return None, None # Seçim iptal edildiyse işlem yapma
+            ANA_KAYIT_YOLU = secilen_yol; ayarlari_kaydet()
+        else: return None, None
 
-    # 3. Seçilen klasörün içine "Müşteri - Proje" klasörü aç
     hedef_klasor = os.path.join(ANA_KAYIT_YOLU, f"{musteri_clean} - {proje_clean}")
-    
     try:
         os.makedirs(hedef_klasor, exist_ok=True)
         return hedef_klasor, proje_clean
