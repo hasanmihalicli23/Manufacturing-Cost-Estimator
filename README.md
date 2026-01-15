@@ -40,20 +40,53 @@ Bu proje, bu süreci **dijitalleştirmek ve otomatize etmek** amacıyla gelişti
 
 ---
 
-## 🛠️ Kurulum ve Çalıştırma
+Harika bir fikir. İnsanlar genelde en çok bu kısımda takılır, o yüzden burayı **"Adım Adım ve Çok Net"** anlatmak projenin kullanılabilirliğini artırır.
 
-Projeyi kendi bilgisayarınızda denemek için aşağıdaki adımları izleyebilirsiniz:
+Aşağıdaki bloğu kopyalayıp `README.md` dosyasındaki ilgili **"Kurulum ve Çalıştırma"** başlığının altına yapıştırabilirsin. Hem samimi hem de teknik bir dille yazdım.
+
+---
+
+### 🛠️ Kurulum ve Çalıştırma Rehberi
+
+Projeyi kendi bilgisayarınızda çalıştırmak ve geliştirmek için aşağıdaki adımları sırasıyla uygulayabilirsiniz.
+
+> **Ön Bilgi:** Bu proje **Python** ile geliştirilmiştir. Bilgisayarınızda Python'un yüklü olduğundan emin olun. (Eğer yüklü değilse [python.org](https://www.python.org/) adresinden indirebilirsiniz.)
+
+#### Adım 1: Projeyi Bilgisayarınıza İndirin
+
+Öncelikle terminalinizi (veya CMD) açın ve projeyi klonlamak için şu komutu yapıştırın:
 
 ```bash
-# 1. Projeyi İndirin
-git clone [https://github.com/hasanmihalicli23/Manufacturing-Cost-Estimator.git](https://github.com/hasanmihalicli23/Manufacturing-Cost-Estimator.git)
+git clone https://github.com/hasanmihalicli23/Manufacturing-Cost-Estimator.git
+
+```
+
+Ardından proje klasörünün içine girin:
+
+```bash
 cd Manufacturing-Cost-Estimator
 
-# 2. Gerekli Kütüphaneleri Yükleyin
+```
+
+#### Adım 2: Gerekli Kütüphaneleri Yükleyin
+
+Projenin çalışması için bazı modern arayüz ve raporlama kütüphanelerine ihtiyacı var. Bunları tek komutla yükleyebilirsiniz:
+
+```bash
 pip install customtkinter pandas requests reportlab openpyxl
 
-# 3. Uygulamayı Başlatın
+```
+
+#### Adım 3: Uygulamayı Başlatın 🚀
+
+Her şey hazır! Şimdi arayüzü başlatmak için aşağıdaki komutu çalıştırın:
+
+```bash
 python maliyet.py
+
+```
+
+> **Not:** Uygulama açıldığında TCMB'den güncel kurları çekmek için internet bağlantısına ihtiyaç duyar. Kurlar otomatik güncellendiğinde sağ üstte "Kurlar Güncel ✔" uyarısını göreceksiniz.
 
 
 <div align="center">
