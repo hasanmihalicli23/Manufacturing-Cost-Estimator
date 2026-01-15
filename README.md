@@ -14,7 +14,6 @@
 
   <br />
 
-  <img src="https://via.placeholder.com/800x400.png?text=Uygulama+Onizleme+(Gorsel+Yukleyin)" alt="Uygulama Önizleme" width="800">
 
 </div>
 
@@ -55,24 +54,12 @@ pip install customtkinter pandas requests reportlab openpyxl
 ### 3. Uygulamayı Başlatın
 python maliyet.py
 
----
-
-## 📂 Proje Yapısı
-
-Manufacturing-Cost-Estimator/
-├── maliyet.py          # 🐍 Ana Kaynak Kod (Uygulama)
-├── katalog.json        # 🗂️ Ürün Veritabanı (Otomatik oluşur)
-├── ayarlar.json        # ⚙️ Kullanıcı Ayarları
-├── discount.ico        # 🎨 Uygulama İkonu
-└── TEKLİFLER/          # 📂 PDF ve Excel Çıktı Klasörü
-
----
 
 <div align="center">
 
   ### 👨‍💻 Geliştirici
   
-  **Hasan Mihalıçlı** *Makine Mühendisliği Öğrencisi & Python Geliştirici*
+  **Hasan Mihalıçlı**
 
   <a href="https://www.linkedin.com/in/hasanmihalicli/" target="_blank">
     <img src="https://img.shields.io/badge/LinkedIn-Connect-blue?style=for-the-badge&logo=linkedin" />
