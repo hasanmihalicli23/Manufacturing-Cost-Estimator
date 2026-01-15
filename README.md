@@ -14,7 +14,7 @@
 
   <br />
 
-  <img src="https://via.placeholder.com/800x400.png?text=Uygulama+Videosu+veya+Gorseli+Yukleyin" alt="Uygulama Önizleme" width="800">
+  <img src="https://via.placeholder.com/800x400.png?text=Uygulama+Onizleme+(Gorsel+Yukleyin)" alt="Uygulama Önizleme" width="800">
 
 </div>
 
@@ -35,6 +35,7 @@ Bu proje, bu süreci **dijitalleştirmek ve otomatize etmek** amacıyla gelişti
 | **⚙️ Dinamik Hesaplama** | Malzeme, İşçilik ve Fason giderlerini (Lazer, Kaplama vb.) birleştirerek maliyeti çıkarır. |
 | **💲 Canlı Kur Takibi** | TCMB'den anlık **USD** ve **EUR** kurlarını çeker, otomatik çapraz kur hesabı yapar. |
 | **📄 PDF Raporlama** | Müşteriye sunulmaya hazır, kaşe/imza alanlı **resmi PDF teklif** oluşturur. |
+| **📊 Excel Dökümü** | Detaylı maliyet analizi ve arşivleme için `.xlsx` çıktısı verir. |
 | **💾 Akıllı Katalog** | Sık kullanılan ürünleri hafızasında tutar, tekrar yazma zahmetinden kurtarır. |
 | **🎨 Modern Arayüz** | Windows 11 uyumlu, **Dark Mode** destekli, kullanıcı dostu arayüz. |
 
@@ -42,25 +43,42 @@ Bu proje, bu süreci **dijitalleştirmek ve otomatize etmek** amacıyla gelişti
 
 ## 🛠️ Kurulum ve Çalıştırma
 
-Projeyi kendi bilgisayarınızda denemek için:
+Projeyi kendi bilgisayarınızda denemek için aşağıdaki adımları izleyebilirsiniz:
 
-```bash
-# 1. Projeyi İndirin
-git clone [https://github.com/hasanmihalicli23/Manufacturing-Cost-Estimator.git](https://github.com/hasanmihalicli23/Manufacturing-Cost-Estimator.git)
+### 1. Projeyi İndirin
+git clone https://github.com/hasanmihalicli23/Manufacturing-Cost-Estimator.git
 cd Manufacturing-Cost-Estimator
 
-# 2. Kütüphaneleri Yükleyin
+### 2. Gerekli Kütüphaneleri Yükleyin
 pip install customtkinter pandas requests reportlab openpyxl
 
-# 3. Çalıştırın
+### 3. Uygulamayı Başlatın
 python maliyet.py
 
-📂 Proje Yapısı
-Bash
+---
+
+## 📂 Proje Yapısı
 
 Manufacturing-Cost-Estimator/
-├── maliyet.py          # 🐍 Ana Kaynak Kod
-├── katalog.json        # 🗂️ Ürün Veritabanı
+├── maliyet.py          # 🐍 Ana Kaynak Kod (Uygulama)
+├── katalog.json        # 🗂️ Ürün Veritabanı (Otomatik oluşur)
 ├── ayarlar.json        # ⚙️ Kullanıcı Ayarları
 ├── discount.ico        # 🎨 Uygulama İkonu
-└── TEKLİFLER/          # 📂 PDF Çıktı Klasörü
+└── TEKLİFLER/          # 📂 PDF ve Excel Çıktı Klasörü
+
+---
+
+<div align="center">
+
+  ### 👨‍💻 Geliştirici
+  
+  **Hasan Mihalıçlı** *Makine Mühendisliği Öğrencisi & Python Geliştirici*
+
+  <a href="https://www.linkedin.com/in/hasanmihalicli/" target="_blank">
+    <img src="https://img.shields.io/badge/LinkedIn-Connect-blue?style=for-the-badge&logo=linkedin" />
+  </a>
+  <a href="https://github.com/hasanmihalicli23" target="_blank">
+    <img src="https://img.shields.io/badge/GitHub-Follow-black?style=for-the-badge&logo=github" />
+  </a>
+
+</div>
