@@ -717,19 +717,27 @@ cmb_filtre = ctk.CTkComboBox(f_ctrl, values=["Tümü", "Sadece Malzeme", "Sadece
 cmb_filtre.pack(side="left", padx=10)
 
 # Sağ Taraftaki Buton Grubu
+# --- PROFESYONEL BUTON GRUBU ---
+# Renk Paleti (Sadece 3 renk kullanıyoruz: Ana İşlem, Yan İşlem, Tehlikeli İşlem)
+COL_PRIMARY = "#1976D2"   # Kurumsal Mavi (Kaydet, PDF, Excel vb.)
+COL_SECONDARY = "#455A64" # Nötr Gri (Klasör, Geçmiş, Yükle)
+COL_DANGER = "#D32F2F"    # Uyarı Kırmızısı (Sil, Sıfırla)
+
+# Buton Listesi: (Metin, Komut, Renk)
 btns = [
-    ("Klasörü Aç", dosya_konumunu_ac, "#607D8B"),
-    ("Projeyi Yükle", projeyi_yukle, "#8E24AA"),
-    ("Teklif Geçmişi", gecmisi_goster, "#3949AB"),
-    ("Projeyi Kaydet", lambda: projeyi_kaydet(False), "#FBC02D"),
-    ("PDF Oluştur", pdf_olustur_ve_ac, "#D81B60"),
-    ("Excel Oluştur", excele_aktar, "#43A047"),
-    ("Sıfırla", sifirla, "#D32F2F"),
-    ("Sil", sil, "#E64A19")
+    ("Klasörü Aç", dosya_konumunu_ac, COL_SECONDARY),
+    ("Projeyi Yükle", projeyi_yukle, COL_SECONDARY),
+    ("Teklif Geçmişi", gecmisi_goster, COL_SECONDARY),
+    ("Projeyi Kaydet", lambda: projeyi_kaydet(False), COL_PRIMARY),
+    ("PDF Oluştur", pdf_olustur_ve_ac, COL_PRIMARY),
+    ("Excel Oluştur", excele_aktar, COL_PRIMARY),
+    ("Sıfırla", sifirla, COL_DANGER),
+    ("Sil", sil, COL_DANGER)
 ]
 
 for txt, cmd, col in reversed(btns):
-    ctk.CTkButton(f_ctrl, text=txt, command=cmd, fg_color=col, width=100).pack(side="right", padx=5)
+    # hover_color özelliğini de ekledik ki üzerine gelince hafif koyulaşsın, daha canlı dursun.
+    ctk.CTkButton(f_ctrl, text=txt, command=cmd, fg_color=col, width=110, height=32, font=("Segoe UI", 12, "bold")).pack(side="right", padx=4)
 
 # Liste (Treeview)
 f_list = ctk.CTkFrame(app, fg_color="transparent")
