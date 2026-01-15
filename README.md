@@ -95,7 +95,7 @@ python maliyet.py
   
   **Hasan Mıhalıçlı**
 
-  <a href="https://www.linkedin.com/in/hasanmihalicli/" target="_blank">
+  <a href="https://www.linkedin.com/in/hasanmihalicli23/" target="_blank">
     <img src="https://img.shields.io/badge/LinkedIn-Connect-blue?style=for-the-badge&logo=linkedin" />
   </a>
   <a href="https://github.com/hasanmihalicli23" target="_blank">
