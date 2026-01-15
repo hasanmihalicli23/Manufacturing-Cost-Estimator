@@ -1,3 +1,17 @@
+"""
+================================================================================
+PROJE ADI: Maliyet Analizi ve Otomatik Teklif Sistemi
+YAZAR: Hasan Mıhalıçlı
+TARİH: Ocak 2026
+AÇIKLAMA: 
+    Bu yazılım, imalat sektörü için malzeme, işçilik ve fason maliyetlerini 
+    hesaplayıp, TCMB kurları üzerinden dinamik fiyatlandırma yapar. 
+    Sonuçları PDF ve Excel formatında raporlar.
+    
+TEKNOLOJİLER: Python, CustomTkinter, Pandas, ReportLab, Threading
+================================================================================
+"""
+
 import customtkinter as ctk
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -10,19 +24,17 @@ import re
 import json
 import os
 import subprocess
+import uuid
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib import colors
 
-# NOT: locale kütüphanesi kaldırıldı çünkü "bad screen distance" hatasına sebep oluyor.
-# Para birimi formatlamasını zaten kendi fonksiyonumuzla (format_para) yapıyoruz.
-
 # --- MODERN AYARLAR ---
 ctk.set_appearance_mode("Dark")  
 ctk.set_default_color_theme("blue") 
-ctk.set_widget_scaling(1.0)  # Ölçekleme sorunu olmaması için standart boyut (Gerekirse 1.0 yapın)
+ctk.set_widget_scaling(1.0)
 
 # --- GLOBAL DEĞİŞKENLER ---
 proje_verileri = []
@@ -49,16 +61,20 @@ varsayilan_katalog = {
 
 # --- YARDIMCI FONKSİYONLAR ---
 def format_para(deger):
-    # Sayıyı TR formatına (1.234,56) çeviren manuel fonksiyon
-    try: return f"{float(deger):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except: return "0,00"
+    """Sayıyı TR para birimi formatına (1.234,56) çevirir."""
+    try: 
+        return f"{float(deger):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except: 
+        return "0,00"
 
 def format_kur_goster(usd_tutar, kur_usd, kur_eur):
+    """Tutarın USD, EUR ve TL karşılıklarını formatlar."""
     tl_karsilik = usd_tutar * kur_usd
     eur_karsilik = (usd_tutar * kur_usd) / kur_eur if kur_eur > 0 else 0
     return f"USD: {format_para(usd_tutar):>10}\nEUR: {format_para(eur_karsilik):>10}\n TL: {format_para(tl_karsilik):>10}"
 
 def temizle_dosya_adi(isim):
+    """Dosya adındaki geçersiz karakterleri temizler."""
     return re.sub(r'[\\/*?:<>|]', '_', str(isim).strip())
 
 # --- DOSYA VE AYAR YÖNETİMİ ---
@@ -69,9 +85,9 @@ def katalog_kaydet(veri):
 def katalog_yukle():
     if os.path.exists(DOSYA_ADI):
         try:
-            with open(DOSYA_ADI, "r", encoding="utf-8") as f: return json.load(f)
+            with open(DOSYA_ADI, "r", encoding="utf-8") as f: 
+                return json.load(f)
         except json.JSONDecodeError:
-            messagebox.showerror("Katalog Hatası", "katalog.json dosyası bozuk!\nVarsayılan liste yükleniyor.")
             return varsayilan_katalog
         except Exception:
             return varsayilan_katalog
@@ -97,6 +113,7 @@ def ayarlari_kaydet():
         except: pass
 
 def tcmb_kur_getir():
+    """Merkez Bankası'ndan güncel kurları çeker (Threading ile çalışır)."""
     try:
         url = "https://www.tcmb.gov.tr/kurlar/today.xml"
         res = requests.get(url)
@@ -104,11 +121,17 @@ def tcmb_kur_getir():
             root = ET.fromstring(res.content)
             for currency in root.findall('Currency'):
                 kod = currency.get('Kod')
-                if kod == 'USD': entry_kur_usd.delete(0, 'end'); entry_kur_usd.insert(0, currency.find('ForexSelling').text)
-                elif kod == 'EUR': entry_kur_eur.delete(0, 'end'); entry_kur_eur.insert(0, currency.find('ForexSelling').text)
+                if kod == 'USD': 
+                    entry_kur_usd.delete(0, 'end')
+                    entry_kur_usd.insert(0, currency.find('ForexSelling').text)
+                elif kod == 'EUR': 
+                    entry_kur_eur.delete(0, 'end')
+                    entry_kur_eur.insert(0, currency.find('ForexSelling').text)
             lbl_durum.configure(text="Kurlar Güncel ✔", text_color="#00E676") 
-        else: lbl_durum.configure(text="Kur Hatası ✘", text_color="#FF5252") 
-    except: lbl_durum.configure(text="Kur Hatası ✘", text_color="#FF5252")
+        else: 
+            lbl_durum.configure(text="Kur Hatası ✘", text_color="#FF5252") 
+    except: 
+        lbl_durum.configure(text="Kur Hatası ✘", text_color="#FF5252")
 
 def baslat_kur_thread(): 
     threading.Thread(target=tcmb_kur_getir).start()
@@ -125,7 +148,8 @@ def klasor_hazirla():
         messagebox.showinfo("Konum Seçimi", "Projelerin kaydedileceği ana klasörü seçiniz.\n(Program bunu hatırlayacaktır)")
         secilen_yol = filedialog.askdirectory()
         if secilen_yol:
-            ANA_KAYIT_YOLU = secilen_yol; ayarlari_kaydet()
+            ANA_KAYIT_YOLU = secilen_yol
+            ayarlari_kaydet()
         else: return None, None
 
     hedef_klasor = os.path.join(ANA_KAYIT_YOLU, f"{musteri_clean} - {proje_clean}")
@@ -199,7 +223,7 @@ def gecmisi_goster():
     top = ctk.CTkToplevel(app)
     top.title("Teklif Geçmişi")
     top.geometry("600x450")
-    top.after(10, top.lift) # Pencereyi öne getir
+    top.after(10, top.lift)
     top.focus_force()
 
     ctk.CTkLabel(top, text=f"Konum: {ANA_KAYIT_YOLU}", text_color="gray").pack(pady=5)
@@ -208,7 +232,6 @@ def gecmisi_goster():
     frame_list = ctk.CTkFrame(top)
     frame_list.pack(fill="both", expand=True, padx=10, pady=10)
     
-    # Standart Listbox ve CTk Scrollbar entegrasyonu (Daha stabil)
     listbox = tk.Listbox(frame_list, font=("Segoe UI", 11), bg="#2b2b2b", fg="white", 
                          borderwidth=0, highlightthickness=0, selectbackground="#1f538d")
     listbox.pack(side="left", fill="both", expand=True, padx=5, pady=5)
@@ -217,7 +240,6 @@ def gecmisi_goster():
     scrollbar.pack(side="right", fill="y")
     listbox.config(yscrollcommand=scrollbar.set)
 
-    # Dosyaları Listele
     bulunan_dosyalar = [] 
     for root, dirs, files in os.walk(ANA_KAYIT_YOLU):
         for file in files:
@@ -237,20 +259,34 @@ def gecmisi_goster():
     listbox.bind("<Double-Button-1>", secileni_yukle)
 
 def yukle_from_path(dosya_yolu):
-    global ACIK_DOSYA_YOLU 
+    global ACIK_DOSYA_YOLU, proje_verileri
     try:
         with open(dosya_yolu, "r", encoding="utf-8") as f: veri = json.load(f)
         
         meta = veri.get("metadata", {})
-        entry_proje_adi.delete(0, 'end'); entry_proje_adi.insert(0, meta.get("proje_adi", ""))
-        entry_musteri.delete(0, 'end'); entry_musteri.insert(0, meta.get("musteri", ""))
-        entry_kur_usd.delete(0, 'end'); entry_kur_usd.insert(0, meta.get("kur_usd", "35.50"))
-        entry_kur_eur.delete(0, 'end'); entry_kur_eur.insert(0, meta.get("kur_eur", "38.20"))
-        entry_kar_malzeme.delete(0, 'end'); entry_kar_malzeme.insert(0, meta.get("kar_malzeme", "30"))
-        entry_kar_iscilik.delete(0, 'end'); entry_kar_iscilik.insert(0, meta.get("kar_iscilik", "60"))
-        entry_kdv.delete(0, 'end'); entry_kdv.insert(0, meta.get("kdv", "20"))
+        
+        # Verileri yerleştir (Sıkışık kod yapısı açıldı)
+        entry_proje_adi.delete(0, 'end')
+        entry_proje_adi.insert(0, meta.get("proje_adi", ""))
+        
+        entry_musteri.delete(0, 'end')
+        entry_musteri.insert(0, meta.get("musteri", ""))
+        
+        entry_kur_usd.delete(0, 'end')
+        entry_kur_usd.insert(0, meta.get("kur_usd", "35.50"))
+        
+        entry_kur_eur.delete(0, 'end')
+        entry_kur_eur.insert(0, meta.get("kur_eur", "38.20"))
+        
+        entry_kar_malzeme.delete(0, 'end')
+        entry_kar_malzeme.insert(0, meta.get("kar_malzeme", "30"))
+        
+        entry_kar_iscilik.delete(0, 'end')
+        entry_kar_iscilik.insert(0, meta.get("kar_iscilik", "60"))
+        
+        entry_kdv.delete(0, 'end')
+        entry_kdv.insert(0, meta.get("kdv", "20"))
 
-        global proje_verileri
         proje_verileri = veri.get("items", [])
         ACIK_DOSYA_YOLU = dosya_yolu
         tabloyu_guncelle()
@@ -426,11 +462,7 @@ def oto_kayit_ayar_degisti(event=None):
     if oto_kayit_job: app.after_cancel(oto_kayit_job); oto_kayit_job = None
     secim = cmb_oto_kayit.get()
     if secim == "Kapalı": return
-    ms = 30000 
-    if secim == "30 Saniye": ms = 30000
-    elif secim == "1 Dakika": ms = 60000
-    elif secim == "2 Dakika": ms = 120000
-    elif secim == "5 Dakika": ms = 300000
+    ms = {"30 Saniye": 30000, "1 Dakika": 60000, "2 Dakika": 120000, "5 Dakika": 300000}[secim]
     oto_kayit_dongusu(ms)
 
 # --- İŞLEMLER ---
@@ -716,14 +748,12 @@ ctk.CTkLabel(f_ctrl, text="Filtre:", font=("Segoe UI", 12, "bold")).pack(side="l
 cmb_filtre = ctk.CTkComboBox(f_ctrl, values=["Tümü", "Sadece Malzeme", "Sadece İşçilik", "Sadece Dış Hizmet"], command=lambda e: tabloyu_guncelle())
 cmb_filtre.pack(side="left", padx=10)
 
-# Sağ Taraftaki Buton Grubu
-# --- PROFESYONEL BUTON GRUBU ---
-# Renk Paleti (Sadece 3 renk kullanıyoruz: Ana İşlem, Yan İşlem, Tehlikeli İşlem)
-COL_PRIMARY = "#1976D2"   # Kurumsal Mavi (Kaydet, PDF, Excel vb.)
-COL_SECONDARY = "#455A64" # Nötr Gri (Klasör, Geçmiş, Yükle)
-COL_DANGER = "#D32F2F"    # Uyarı Kırmızısı (Sil, Sıfırla)
+# --- PROFESYONEL BUTON GRUBU (TEK RENK) ---
+# Kurumsal Renkler
+COL_PRIMARY = "#1976D2"   # Mavi (Ana İşlemler)
+COL_SECONDARY = "#546E7A" # Gri (Navigasyon)
+COL_DANGER = "#D32F2F"    # Kırmızı (Silme/Sıfırlama)
 
-# Buton Listesi: (Metin, Komut, Renk)
 btns = [
     ("Klasörü Aç", dosya_konumunu_ac, COL_SECONDARY),
     ("Projeyi Yükle", projeyi_yukle, COL_SECONDARY),
@@ -736,8 +766,7 @@ btns = [
 ]
 
 for txt, cmd, col in reversed(btns):
-    # hover_color özelliğini de ekledik ki üzerine gelince hafif koyulaşsın, daha canlı dursun.
-    ctk.CTkButton(f_ctrl, text=txt, command=cmd, fg_color=col, width=110, height=32, font=("Segoe UI", 12, "bold")).pack(side="right", padx=4)
+    ctk.CTkButton(f_ctrl, text=txt, command=cmd, fg_color=col, width=110, height=32, font=("Segoe UI", 12, "bold")).pack(side="right", padx=5)
 
 # Liste (Treeview)
 f_list = ctk.CTkFrame(app, fg_color="transparent")
