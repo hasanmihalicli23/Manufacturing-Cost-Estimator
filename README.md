@@ -44,14 +44,15 @@ Bu proje, bu süreci **dijitalleştirmek ve otomatize etmek** amacıyla gelişti
 
 Projeyi kendi bilgisayarınızda denemek için aşağıdaki adımları izleyebilirsiniz:
 
-### 1. Projeyi İndirin
-git clone https://github.com/hasanmihalicli23/Manufacturing-Cost-Estimator.git
+```bash
+# 1. Projeyi İndirin
+git clone [https://github.com/hasanmihalicli23/Manufacturing-Cost-Estimator.git](https://github.com/hasanmihalicli23/Manufacturing-Cost-Estimator.git)
 cd Manufacturing-Cost-Estimator
 
-### 2. Gerekli Kütüphaneleri Yükleyin
+# 2. Gerekli Kütüphaneleri Yükleyin
 pip install customtkinter pandas requests reportlab openpyxl
 
-### 3. Uygulamayı Başlatın
+# 3. Uygulamayı Başlatın
 python maliyet.py
 
 
@@ -59,7 +60,7 @@ python maliyet.py
 
   ### 👨‍💻 Geliştirici
   
-  **Hasan Mihalıçlı**
+  **Hasan Mıhalıçlı**
 
   <a href="https://www.linkedin.com/in/hasanmihalicli/" target="_blank">
     <img src="https://img.shields.io/badge/LinkedIn-Connect-blue?style=for-the-badge&logo=linkedin" />
