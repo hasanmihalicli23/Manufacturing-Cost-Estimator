@@ -1,13 +1,17 @@
 """
 ================================================================================
-PROJE ADI: Maliyet Analizi ve Otomatik Teklif Sistemi
-YAZAR: Hasan Mıhalıçlı
+PROJE: Maliyet Analizi ve Otomatik Teklif Sistemi
+YAZAR: Hasan Mihalıçlı
+SÜRÜM: 1.0.0
 TARİH: Ocak 2026
-AÇIKLAMA: 
-    Bu yazılım, imalat sektörü için malzeme, işçilik ve fason maliyetlerini 
-    hesaplayıp, TCMB kurları üzerinden dinamik fiyatlandırma yapar. 
-    Sonuçları PDF ve Excel formatında raporlar.
-    
+
+AÇIKLAMA:
+Bu yazılım, imalat sektörü için özel olarak geliştirilmiş bir masaüstü otomasyonudur.
+- TCMB'den anlık döviz kurlarını çeker.
+- Malzeme, İşçilik ve Fason giderlerini dinamik hesaplar.
+- CustomTkinter ile modern, Dark Mode destekli arayüz sunar.
+- Tek tıkla PDF teklif dosyası ve Excel raporu oluşturur.
+
 TEKNOLOJİLER: Python, CustomTkinter, Pandas, ReportLab, Threading
 ================================================================================
 """
@@ -31,20 +35,30 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib import colors
 
-# --- MODERN AYARLAR ---
-ctk.set_appearance_mode("Dark")  
-ctk.set_default_color_theme("blue") 
-ctk.set_widget_scaling(1.0)
+# --- KONFIGURASYON VE SABITLER ---
+CTK_THEME = "blue"
+CTK_APPEARANCE = "Dark"
+APP_TITLE = "Teklif Hazırlama ve Maliyet Analizi"
+FONT_MAIN = ("Segoe UI", 12)
+FONT_BOLD = ("Segoe UI", 12, "bold")
 
-# --- GLOBAL DEĞİŞKENLER ---
-proje_verileri = []
-oto_kayit_job = None 
-ANA_KAYIT_YOLU = None  
-ACIK_DOSYA_YOLU = None 
+# Kurumsal Renk Paleti
+COLOR_PRIMARY = "#1976D2"    # Ana İşlem Mavisi
+COLOR_SECONDARY = "#546E7A"  # Nötr Gri (Navigasyon)
+COLOR_DANGER = "#D32F2F"     # Uyarı Kırmızısı (Silme)
+COLOR_SUCCESS = "#388E3C"    # Onay Yeşili
+
+# Dosya Yolları
 AYAR_DOSYASI = "ayarlar.json"
 DOSYA_ADI = "katalog.json"
+ANA_KAYIT_YOLU = None  
+ACIK_DOSYA_YOLU = None 
 
-# --- KATALOG VERİSİ ---
+# Global Değişkenler
+proje_verileri = []
+oto_kayit_job = None 
+
+# Varsayılan Katalog Verisi
 varsayilan_katalog = {
     "Motorlar": ["Asenkron Motor 0.18 kW", "Asenkron Motor 0.37 kW", "Asenkron Motor 0.55 kW", "Asenkron Motor 1.5 kW", "Servo Motor 750W"],
     "Redüktörler": ["Sonsuz Vida 30 Gövde", "Sonsuz Vida 50 Gövde", "Helisel Dişli", "Planet Redüktör"],
@@ -60,15 +74,16 @@ varsayilan_katalog = {
 }
 
 # --- YARDIMCI FONKSİYONLAR ---
+
 def format_para(deger):
-    """Sayıyı TR para birimi formatına (1.234,56) çevirir."""
+    """Sayısal değeri TR para formatına (1.234,56) çevirir."""
     try: 
         return f"{float(deger):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except: 
         return "0,00"
 
 def format_kur_goster(usd_tutar, kur_usd, kur_eur):
-    """Tutarın USD, EUR ve TL karşılıklarını formatlar."""
+    """Tutarı USD, EUR ve TL cinsinden formatlanmış string olarak döner."""
     tl_karsilik = usd_tutar * kur_usd
     eur_karsilik = (usd_tutar * kur_usd) / kur_eur if kur_eur > 0 else 0
     return f"USD: {format_para(usd_tutar):>10}\nEUR: {format_para(eur_karsilik):>10}\n TL: {format_para(tl_karsilik):>10}"
@@ -78,11 +93,14 @@ def temizle_dosya_adi(isim):
     return re.sub(r'[\\/*?:<>|]', '_', str(isim).strip())
 
 # --- DOSYA VE AYAR YÖNETİMİ ---
+
 def katalog_kaydet(veri):
+    """Katalog verisini JSON olarak kaydeder."""
     with open(DOSYA_ADI, "w", encoding="utf-8") as f:
         json.dump(veri, f, ensure_ascii=False, indent=4)
 
 def katalog_yukle():
+    """Katalog verisini JSON dosyasından yükler."""
     if os.path.exists(DOSYA_ADI):
         try:
             with open(DOSYA_ADI, "r", encoding="utf-8") as f: 
@@ -112,8 +130,10 @@ def ayarlari_kaydet():
                 json.dump({"kayit_yolu": ANA_KAYIT_YOLU}, f)
         except: pass
 
+# --- İŞ MANTIĞI VE API ---
+
 def tcmb_kur_getir():
-    """Merkez Bankası'ndan güncel kurları çeker (Threading ile çalışır)."""
+    """TCMB'den güncel kurları çeker ve arayüzü günceller."""
     try:
         url = "https://www.tcmb.gov.tr/kurlar/today.xml"
         res = requests.get(url)
@@ -127,38 +147,47 @@ def tcmb_kur_getir():
                 elif kod == 'EUR': 
                     entry_kur_eur.delete(0, 'end')
                     entry_kur_eur.insert(0, currency.find('ForexSelling').text)
-            lbl_durum.configure(text="Kurlar Güncel ✔", text_color="#00E676") 
+            lbl_durum.configure(text="Kurlar Güncel ✔", text_color=COLOR_SUCCESS) 
         else: 
-            lbl_durum.configure(text="Kur Hatası ✘", text_color="#FF5252") 
+            lbl_durum.configure(text="Kur Hatası ✘", text_color=COLOR_DANGER) 
     except: 
-        lbl_durum.configure(text="Kur Hatası ✘", text_color="#FF5252")
+        lbl_durum.configure(text="Kur Hatası ✘", text_color=COLOR_DANGER)
 
 def baslat_kur_thread(): 
+    """Kur çekme işlemini arayüzü dondurmadan arka planda başlatır."""
     threading.Thread(target=tcmb_kur_getir).start()
 
 def klasor_hazirla():
+    """Proje için klasör yapısını hazırlar veya seçtirir."""
     global ANA_KAYIT_YOLU
     proje, musteri = entry_proje_adi.get(), entry_musteri.get()
-    if not proje or not musteri: return None, None 
+    
+    if not proje or not musteri: 
+        return None, None 
 
     proje_clean, musteri_clean = temizle_dosya_adi(proje), temizle_dosya_adi(musteri)
 
-    if ANA_KAYIT_YOLU is None: ayarlari_yukle() 
+    if ANA_KAYIT_YOLU is None: 
+        ayarlari_yukle() 
+    
     if ANA_KAYIT_YOLU is None or not os.path.exists(ANA_KAYIT_YOLU):
         messagebox.showinfo("Konum Seçimi", "Projelerin kaydedileceği ana klasörü seçiniz.\n(Program bunu hatırlayacaktır)")
         secilen_yol = filedialog.askdirectory()
         if secilen_yol:
             ANA_KAYIT_YOLU = secilen_yol
             ayarlari_kaydet()
-        else: return None, None
+        else: 
+            return None, None
 
     hedef_klasor = os.path.join(ANA_KAYIT_YOLU, f"{musteri_clean} - {proje_clean}")
     try:
         os.makedirs(hedef_klasor, exist_ok=True)
         return hedef_klasor, proje_clean
-    except: return None, None
+    except: 
+        return None, None
 
 def proje_verilerini_topla():
+    """Arayüzdeki tüm verileri sözlük yapısında toplar."""
     return {
         "metadata": {
             "proje_adi": entry_proje_adi.get(),
@@ -173,7 +202,8 @@ def proje_verilerini_topla():
     }
 
 def projeyi_kaydet(sessiz=False):
-    global ACIK_DOSYA_YOLU, ANA_KAYIT_YOLU
+    """Mevcut projeyi JSON olarak kaydeder."""
+    global ACIK_DOSYA_YOLU
     
     klasor_yolu, dosya_adi = klasor_hazirla()
     if not klasor_yolu: 
@@ -185,13 +215,8 @@ def projeyi_kaydet(sessiz=False):
     
     try:
         if ACIK_DOSYA_YOLU and os.path.exists(ACIK_DOSYA_YOLU):
-            if ACIK_DOSYA_YOLU == yeni_tam_yol: pass
-            else:
-                cevap = messagebox.askyesno("İsim Değişikliği", 
-                                            f"Proje adı değişmiş.\n\nEski Dosya: {os.path.basename(ACIK_DOSYA_YOLU)}\nYeni Dosya: {dosya_adi}.json\n\nEski dosyayı silip yeni isimle mi kaydedilsin?")
-                if cevap: 
-                    try: os.remove(ACIK_DOSYA_YOLU)
-                    except: pass
+            if ACIK_DOSYA_YOLU != yeni_tam_yol:
+                pass 
         
         with open(yeni_tam_yol, "w", encoding="utf-8") as f:
             json.dump(veri, f, ensure_ascii=False, indent=4)
@@ -204,22 +229,63 @@ def projeyi_kaydet(sessiz=False):
         return False
 
 def projeyi_yukle():
+    """Kayıtlı bir JSON projesini yükler."""
     base_dir = os.path.dirname(os.path.abspath(__file__))
     initial_dir = os.path.join(base_dir, "TEKLIFLER")
-    if not os.path.exists(initial_dir): initial_dir = base_dir
+    if not os.path.exists(initial_dir): 
+        initial_dir = base_dir
 
     dosya_yolu = filedialog.askopenfilename(initialdir=initial_dir, filetypes=[("Elif Proje Dosyası", "*.json")])
-    if not dosya_yolu: return
-    yukle_from_path(dosya_yolu)
+    if dosya_yolu:
+        yukle_from_path(dosya_yolu)
+
+def yukle_from_path(dosya_yolu):
+    global ACIK_DOSYA_YOLU, proje_verileri
+    try:
+        with open(dosya_yolu, "r", encoding="utf-8") as f: 
+            veri = json.load(f)
+        
+        meta = veri.get("metadata", {})
+        
+        # Arayüz alanlarını temizle ve doldur (Clean Code)
+        entry_proje_adi.delete(0, 'end')
+        entry_proje_adi.insert(0, meta.get("proje_adi", ""))
+        
+        entry_musteri.delete(0, 'end')
+        entry_musteri.insert(0, meta.get("musteri", ""))
+        
+        entry_kur_usd.delete(0, 'end')
+        entry_kur_usd.insert(0, meta.get("kur_usd", "35.50"))
+        
+        entry_kur_eur.delete(0, 'end')
+        entry_kur_eur.insert(0, meta.get("kur_eur", "38.20"))
+        
+        entry_kar_malzeme.delete(0, 'end')
+        entry_kar_malzeme.insert(0, meta.get("kar_malzeme", "30"))
+        
+        entry_kar_iscilik.delete(0, 'end')
+        entry_kar_iscilik.insert(0, meta.get("kar_iscilik", "60"))
+        
+        entry_kdv.delete(0, 'end')
+        entry_kdv.insert(0, meta.get("kdv", "20"))
+
+        proje_verileri = veri.get("items", [])
+        ACIK_DOSYA_YOLU = dosya_yolu
+        tabloyu_guncelle()
+        hesapla()
+        messagebox.showinfo("Yüklendi", "Proje başarıyla yüklendi.")
+    except Exception as e: 
+        messagebox.showerror("Hata", f"Yüklenemedi: {e}")
 
 def gecmisi_goster():
     global ANA_KAYIT_YOLU
     if ANA_KAYIT_YOLU is None:
         secilen_yol = filedialog.askdirectory(title="Projelerin Bulunduğu Klasörü Göster")
-        if secilen_yol: ANA_KAYIT_YOLU = secilen_yol
-        else: return
+        if secilen_yol: 
+            ANA_KAYIT_YOLU = secilen_yol
+        else: 
+            return
 
-    # Toplevel Pencere (Hata önleyici .lift() eklendi)
     top = ctk.CTkToplevel(app)
     top.title("Teklif Geçmişi")
     top.geometry("600x450")
@@ -227,7 +293,7 @@ def gecmisi_goster():
     top.focus_force()
 
     ctk.CTkLabel(top, text=f"Konum: {ANA_KAYIT_YOLU}", text_color="gray").pack(pady=5)
-    ctk.CTkLabel(top, text="Kayıtlı Projeler", font=("Segoe UI", 16, "bold")).pack(pady=5)
+    ctk.CTkLabel(top, text="Kayıtlı Projeler", font=FONT_BOLD).pack(pady=5)
 
     frame_list = ctk.CTkFrame(top)
     frame_list.pack(fill="both", expand=True, padx=10, pady=10)
@@ -258,49 +324,17 @@ def gecmisi_goster():
 
     listbox.bind("<Double-Button-1>", secileni_yukle)
 
-def yukle_from_path(dosya_yolu):
-    global ACIK_DOSYA_YOLU, proje_verileri
-    try:
-        with open(dosya_yolu, "r", encoding="utf-8") as f: veri = json.load(f)
-        
-        meta = veri.get("metadata", {})
-        
-        # Verileri yerleştir (Sıkışık kod yapısı açıldı)
-        entry_proje_adi.delete(0, 'end')
-        entry_proje_adi.insert(0, meta.get("proje_adi", ""))
-        
-        entry_musteri.delete(0, 'end')
-        entry_musteri.insert(0, meta.get("musteri", ""))
-        
-        entry_kur_usd.delete(0, 'end')
-        entry_kur_usd.insert(0, meta.get("kur_usd", "35.50"))
-        
-        entry_kur_eur.delete(0, 'end')
-        entry_kur_eur.insert(0, meta.get("kur_eur", "38.20"))
-        
-        entry_kar_malzeme.delete(0, 'end')
-        entry_kar_malzeme.insert(0, meta.get("kar_malzeme", "30"))
-        
-        entry_kar_iscilik.delete(0, 'end')
-        entry_kar_iscilik.insert(0, meta.get("kar_iscilik", "60"))
-        
-        entry_kdv.delete(0, 'end')
-        entry_kdv.insert(0, meta.get("kdv", "20"))
-
-        proje_verileri = veri.get("items", [])
-        ACIK_DOSYA_YOLU = dosya_yolu
-        tabloyu_guncelle()
-        hesapla()
-        messagebox.showinfo("Yüklendi", "Proje başarıyla yüklendi.")
-    except Exception as e: messagebox.showerror("Hata", f"Yüklenemedi: {e}")
-
 def excele_aktar():
-    if not proje_verileri: messagebox.showwarning("Uyarı", "Liste boş."); return
+    if not proje_verileri: 
+        messagebox.showwarning("Uyarı", "Liste boş.")
+        return
+        
     klasor_yolu, dosya_adi = klasor_hazirla()
     if not klasor_yolu: return
     
     tam_yol = os.path.join(klasor_yolu, f"{dosya_adi}.xlsx")
     excel_data = []
+    
     for veri in proje_verileri:
         tutar_tl = veri["tutar"] if veri["para"] == "TL" else 0
         tutar_usd = veri["tutar"] if veri["para"] == "USD" else 0
@@ -312,6 +346,7 @@ def excele_aktar():
     try:
         with pd.ExcelWriter(tam_yol, engine='openpyxl') as writer:
             df.to_excel(writer, sheet_name='Detaylar', index=False)
+            
             ozet_data = {
                 'Kalem': ['Proje Adı', 'Müşteri Firma', 'Tarih', 'USD Kuru', 'EUR Kuru', '---', 'Toplam Ham Maliyet ($)', 'Toplam Teklif Fiyatı ($)', 'KDV Dahil Genel Toplam ($)'],
                 'Değer': [entry_proje_adi.get(), entry_musteri.get(), datetime.now().strftime('%d.%m.%Y'), entry_kur_usd.get(), entry_kur_eur.get(), '',
@@ -319,8 +354,10 @@ def excele_aktar():
             }
             pd.DataFrame(ozet_data).to_excel(writer, sheet_name='Teklif Özeti', index=False)
         
-        if messagebox.askyesno("Excel Hazır", f"Dosya oluşturuldu:\n{tam_yol}\n\nKlasörü açmak ister misiniz?"): dosya_konumunu_ac()
-    except Exception as e: messagebox.showerror("Hata", str(e))
+        if messagebox.askyesno("Excel Hazır", f"Dosya oluşturuldu:\n{tam_yol}\n\nKlasörü açmak ister misiniz?"): 
+            dosya_konumunu_ac()
+    except Exception as e: 
+        messagebox.showerror("Hata", str(e))
 
 def pdf_olustur_ve_ac():
     if not proje_verileri:
@@ -350,6 +387,7 @@ def pdf_olustur_ve_ac():
         except:
             font_normal = 'Helvetica'; font_bold = 'Helvetica-Bold'
 
+        # PDF Başlık ve Bilgiler
         c.setFont(font_bold, 16)
         c.drawRightString(genislik - 30, yukseklik - 50, "MALİYET VE TEKLİF RAPORU")
         
@@ -447,30 +485,39 @@ def pdf_olustur_ve_ac():
 
 def dosya_konumunu_ac():
     klasor_yolu, _ = klasor_hazirla()
-    if klasor_yolu and os.path.exists(klasor_yolu): os.startfile(klasor_yolu)
+    if klasor_yolu and os.path.exists(klasor_yolu): 
+        os.startfile(klasor_yolu)
 
 def oto_kayit_dongusu(interval_ms):
     global oto_kayit_job
     if cmb_oto_kayit.get() == "Kapalı": return
     if entry_proje_adi.get() and entry_musteri.get():
         projeyi_kaydet(sessiz=True)
-        print(f"Otomatik Kayıt: {datetime.now().strftime('%H:%M:%S')}")
     oto_kayit_job = app.after(interval_ms, lambda: oto_kayit_dongusu(interval_ms))
 
 def oto_kayit_ayar_degisti(event=None):
     global oto_kayit_job
-    if oto_kayit_job: app.after_cancel(oto_kayit_job); oto_kayit_job = None
+    if oto_kayit_job: 
+        app.after_cancel(oto_kayit_job)
+        oto_kayit_job = None
+    
     secim = cmb_oto_kayit.get()
     if secim == "Kapalı": return
-    ms = {"30 Saniye": 30000, "1 Dakika": 60000, "2 Dakika": 120000, "5 Dakika": 300000}[secim]
-    oto_kayit_dongusu(ms)
+    
+    # Süre Sözlüğü
+    ms_map = {"30 Saniye": 30000, "1 Dakika": 60000, "2 Dakika": 120000, "5 Dakika": 300000}
+    if secim in ms_map:
+        oto_kayit_dongusu(ms_map[secim])
 
-# --- İŞLEMLER ---
+# --- GUI İŞLEMLERİ ---
+
 def kategori_degisti(event):
     secilen = cmb_kategori.get()
     cmb_urun.configure(values=katalog.get(secilen, []))
-    if katalog.get(secilen): cmb_urun.set(katalog.get(secilen)[0])
-    else: cmb_urun.set("")
+    if katalog.get(secilen): 
+        cmb_urun.set(katalog.get(secilen)[0])
+    else: 
+        cmb_urun.set("")
     manuel_mod_kontrol()
 
 def manuel_mod_kontrol():
@@ -487,15 +534,26 @@ def manuel_mod_kontrol():
 def veri_ekle(tip, kategori, urun, miktar, birim, birim_fiyat, para_birimi):
     try:
         tutar = float(miktar) * float(birim_fiyat)
-        yeni_kayit = {"id": len(proje_verileri) + 1, "tip": tip, "kategori": kategori, "urun": urun,
-                      "miktar": float(miktar), "birim": birim, "birim_fiyat": float(birim_fiyat),
-                      "para": para_birimi, "tutar": tutar}
+        yeni_kayit = {
+            "id": len(proje_verileri) + 1, 
+            "tip": tip, 
+            "kategori": kategori, 
+            "urun": urun,
+            "miktar": float(miktar), 
+            "birim": birim, 
+            "birim_fiyat": float(birim_fiyat),
+            "para": para_birimi, 
+            "tutar": tutar
+        }
         proje_verileri.append(yeni_kayit)
         tabloyu_guncelle()
-    except ValueError: messagebox.showerror("Hata", "Sayısal değer hatası.")
+    except ValueError: 
+        messagebox.showerror("Hata", "Sayısal değer hatası.")
 
 def tabloyu_guncelle():
-    for i in tablo.get_children(): tablo.delete(i)
+    for i in tablo.get_children(): 
+        tablo.delete(i)
+    
     filtre = cmb_filtre.get() 
     for veri in proje_verileri:
         goster = False
@@ -505,33 +563,60 @@ def tabloyu_guncelle():
         elif filtre == "Sadece Dış Hizmet" and veri["tip"] == "FASON": goster = True
         
         if goster:
-            tablo.insert("", "end", values=(veri["kategori"], veri["urun"], f"{veri['miktar']:g} {veri['birim']}",
-                                            format_para(veri["birim_fiyat"]), veri["para"], format_para(veri["tutar"]),
-                                            veri["tutar"], veri["birim_fiyat"]))
+            tablo.insert("", "end", values=(
+                veri["kategori"], 
+                veri["urun"], 
+                f"{veri['miktar']:g} {veri['birim']}",
+                format_para(veri["birim_fiyat"]), 
+                veri["para"], 
+                format_para(veri["tutar"]),
+                veri["tutar"], 
+                veri["birim_fiyat"]
+            ))
 
 def malzeme_ekle():
     if not entry_fiyat.get(): return
-    secilen_kat = cmb_kategori.get(); girilen_urun = cmb_urun.get()
-    miktar = entry_adet.get().replace(',', '.'); fiyat = entry_fiyat.get().replace(',', '.')
+    secilen_kat = cmb_kategori.get()
+    girilen_urun = cmb_urun.get()
+    miktar = entry_adet.get().replace(',', '.')
+    fiyat = entry_fiyat.get().replace(',', '.')
+    
     veri_ekle("MALZEME", secilen_kat, girilen_urun, miktar, cmb_birim.get(), fiyat, cmb_para.get())
+    
+    # Yeni ürün kataloğa ekleme
     if secilen_kat in katalog and girilen_urun not in katalog[secilen_kat]:
-        katalog[secilen_kat].append(girilen_urun); katalog_kaydet(katalog); cmb_urun.configure(values=katalog[secilen_kat])
-    entry_adet.delete(0, 'end'); entry_adet.insert(0, "1"); entry_fiyat.delete(0, 'end')
+        katalog[secilen_kat].append(girilen_urun)
+        katalog_kaydet(katalog)
+        cmb_urun.configure(values=katalog[secilen_kat])
+        
+    entry_adet.delete(0, 'end')
+    entry_adet.insert(0, "1")
+    entry_fiyat.delete(0, 'end')
 
 def iscelik_ekle():
     try:
-        kisi = entry_isci_kisi.get().replace(',', '.'); saat = entry_isci_saat.get().replace(',', '.')
-        ucret = entry_isci_ucret.get().replace(',', '.'); toplam_saat = float(kisi) * float(saat)
+        kisi = entry_isci_kisi.get().replace(',', '.')
+        saat = entry_isci_saat.get().replace(',', '.')
+        ucret = entry_isci_ucret.get().replace(',', '.')
+        toplam_saat = float(kisi) * float(saat)
+        
         veri_ekle("ISCILIK", "İŞÇİLİK GİDERİ", f"{int(float(kisi))} Kişi Çalışması", toplam_saat, "Saat", ucret, cmb_isci_para.get())
-    except: messagebox.showerror("Hata", "İşçilik değerlerini kontrol edin.")
+    except: 
+        messagebox.showerror("Hata", "İşçilik değerlerini kontrol edin.")
 
 def otomasyon_ekle():
     try:
-        fiyat = entry_oto_fiyat.get().replace(',', '.'); tur = cmb_oto_tur.get(); aciklama = entry_oto_aciklama.get()
+        fiyat = entry_oto_fiyat.get().replace(',', '.')
+        tur = cmb_oto_tur.get()
+        aciklama = entry_oto_aciklama.get()
         urun_adi = f"{tur} - {aciklama}" if aciklama else tur
+        
         veri_ekle("FASON", "DIŞ HİZMET / FASON", urun_adi, 1, "Hizmet", fiyat, cmb_oto_para.get())
-        entry_oto_fiyat.delete(0, 'end'); entry_oto_aciklama.delete(0, 'end')
-    except: messagebox.showerror("Hata", "Fiyat giriniz.")
+        
+        entry_oto_fiyat.delete(0, 'end')
+        entry_oto_aciklama.delete(0, 'end')
+    except: 
+        messagebox.showerror("Hata", "Fiyat giriniz.")
 
 def sil():
     secili = tablo.selection()
@@ -542,37 +627,54 @@ def sil():
             vals = tablo.item(s)['values']
             for i, veri in enumerate(proje_verileri):
                 if veri["urun"] == vals[1] and format_para(veri["tutar"]) == vals[5]:
-                    silinecek_indexler.append(i); break
-        for i in sorted(silinecek_indexler, reverse=True): del proje_verileri[i]
+                    silinecek_indexler.append(i)
+                    break
+        
+        for i in sorted(silinecek_indexler, reverse=True): 
+            del proje_verileri[i]
         tabloyu_guncelle()
 
 def sifirla():
     if messagebox.askyesno("Sıfırla", "Tüm liste ve proje bilgileri silinecek?"):
-        proje_verileri.clear(); tabloyu_guncelle()
-        entry_proje_adi.delete(0, 'end'); entry_musteri.delete(0, 'end')
-        for lbl in [lbl_ham_malzeme_val, lbl_ham_iscilik_val, lbl_ham_toplam_val, lbl_satis_malzeme_val, lbl_satis_iscilik_val, lbl_satis_toplam_val, lbl_tl_teklif_val, lbl_tl_kdvli_val]:
+        proje_verileri.clear()
+        tabloyu_guncelle()
+        entry_proje_adi.delete(0, 'end')
+        entry_musteri.delete(0, 'end')
+        
+        for lbl in [lbl_ham_malzeme_val, lbl_ham_iscilik_val, lbl_ham_toplam_val, 
+                    lbl_satis_malzeme_val, lbl_satis_iscilik_val, lbl_satis_toplam_val, 
+                    lbl_tl_teklif_val, lbl_tl_kdvli_val]:
             lbl.configure(text="...")
 
 def hesapla():
     try:
-        kur_usd = float(entry_kur_usd.get().replace(',', '.')); kur_eur = float(entry_kur_eur.get().replace(',', '.'))
-        marj_malzeme = float(entry_kar_malzeme.get().replace(',', '.')); marj_iscilik = float(entry_kar_iscilik.get().replace(',', '.'))
+        kur_usd = float(entry_kur_usd.get().replace(',', '.'))
+        kur_eur = float(entry_kur_eur.get().replace(',', '.'))
+        marj_malzeme = float(entry_kar_malzeme.get().replace(',', '.'))
+        marj_iscilik = float(entry_kar_iscilik.get().replace(',', '.'))
         kdv_orani = float(entry_kdv.get().replace(',', '.'))
 
-        ham_malzeme_usd = 0; ham_iscilik_usd = 0; satis_malzeme_usd = 0; satis_iscilik_usd = 0
+        ham_malzeme_usd = 0
+        ham_iscilik_usd = 0
+        satis_malzeme_usd = 0
+        satis_iscilik_usd = 0
+        
         for veri in proje_verileri:
             tutar_usd = veri["tutar"]
             if veri["para"] == "TL": tutar_usd /= kur_usd
             elif veri["para"] == "EUR": tutar_usd = (veri["tutar"] * kur_eur) / kur_usd
             
             if veri["tip"] == "ISCILIK":
-                ham_iscilik_usd += tutar_usd; satis_iscilik_usd += tutar_usd * (1 + (marj_iscilik / 100))
+                ham_iscilik_usd += tutar_usd
+                satis_iscilik_usd += tutar_usd * (1 + (marj_iscilik / 100))
             else:
-                ham_malzeme_usd += tutar_usd; satis_malzeme_usd += tutar_usd * (1 + (marj_malzeme / 100))
+                ham_malzeme_usd += tutar_usd
+                satis_malzeme_usd += tutar_usd * (1 + (marj_malzeme / 100))
 
         ham_toplam_usd = ham_malzeme_usd + ham_iscilik_usd
         satis_toplam_usd = satis_malzeme_usd + satis_iscilik_usd
-        teklif_usd = satis_toplam_usd; kdvli_usd = teklif_usd * (1 + kdv_orani/100)
+        teklif_usd = satis_toplam_usd
+        kdvli_usd = teklif_usd * (1 + kdv_orani/100)
         
         lbl_ham_malzeme_val.configure(text=format_kur_goster(ham_malzeme_usd, kur_usd, kur_eur))
         lbl_ham_iscilik_val.configure(text=format_kur_goster(ham_iscilik_usd, kur_usd, kur_eur))
@@ -582,7 +684,8 @@ def hesapla():
         lbl_satis_toplam_val.configure(text=format_kur_goster(satis_toplam_usd, kur_usd, kur_eur))
         lbl_tl_teklif_val.configure(text=format_kur_goster(teklif_usd, kur_usd, kur_eur))
         lbl_tl_kdvli_val.configure(text=format_kur_goster(kdvli_usd, kur_usd, kur_eur))
-    except ValueError: messagebox.showerror("Hata", "Oranları ve kurları kontrol edin.")
+    except ValueError: 
+        messagebox.showerror("Hata", "Oranları ve kurları kontrol edin.")
 
 def sirala(col, reverse):
     l = []
@@ -594,24 +697,34 @@ def sirala(col, reverse):
             try: val = float(val.split()[0])
             except: val = 0
         l.append((val, k))
+    
     l.sort(reverse=reverse, key=lambda x: x[0])
-    for index, (val, k) in enumerate(l): tablo.move(k, '', index)
+    for index, (val, k) in enumerate(l): 
+        tablo.move(k, '', index)
     tablo.heading(col, command=lambda: sirala(col, not reverse))
 
 def listeden_sil_buton():
-    secilen_kat = cmb_kategori.get(); secilen_urun = cmb_urun.get()
+    secilen_kat = cmb_kategori.get()
+    secilen_urun = cmb_urun.get()
     if secilen_kat in katalog and secilen_urun in katalog[secilen_kat]:
         if messagebox.askyesno("Sil", f"'{secilen_urun}' veritabanından silinsin mi?"):
-            katalog[secilen_kat].remove(secilen_urun); katalog_kaydet(katalog); cmb_urun.configure(values=katalog[secilen_kat]); cmb_urun.set("")
+            katalog[secilen_kat].remove(secilen_urun)
+            katalog_kaydet(katalog)
+            cmb_urun.configure(values=katalog[secilen_kat])
+            cmb_urun.set("")
 
-# --- ARAYÜZ (CustomTkinter) ---
+# --- ARAYÜZ OLUŞTURMA ---
+
+ctk.set_appearance_mode(CTK_APPEARANCE)  
+ctk.set_default_color_theme(CTK_THEME) 
+ctk.set_widget_scaling(1.0)
 
 app = ctk.CTk()
-app.title("Teklif Hazırlama ve Maliyet Analizi")
-# HATA ÖNLEME: Eğer 'zoomed' hatası alırsan burayı sil, yerine app.geometry("1000x800") yaz.
-app.after(0, lambda: app.state('zoomed'))
+app.title(APP_TITLE)
+# Zoom hatasını önlemek için güvenli başlatma
+app.after(0, lambda: app.state('zoomed') if os.name == 'nt' else app.geometry("1200x800"))
 
-# Treeview için Stil Ayarı (CustomTkinter'da direkt Treeview olmadığı için stil ile uyduruyoruz)
+# Treeview Stil Ayarları
 style = ttk.Style()
 style.theme_use("clam")
 style.configure("Treeview", 
@@ -625,20 +738,20 @@ style.configure("Treeview.Heading",
                 foreground="white", 
                 relief="flat",
                 font=("Segoe UI", 11, "bold"))
-style.map("Treeview", background=[('selected', '#1f538d')]) # Seçilince mavi
+style.map("Treeview", background=[('selected', '#1f538d')]) 
 
-# Header (Başlık) Frame
-frame_head = ctk.CTkFrame(app, corner_radius=0) # Köşeleri dik olsun
+# --- HEADER ---
+frame_head = ctk.CTkFrame(app, corner_radius=0)
 frame_head.pack(fill="x", padx=0, pady=0)
 
 f_left = ctk.CTkFrame(frame_head, fg_color="transparent")
 f_left.pack(side="left", padx=20, pady=15)
 
-ctk.CTkLabel(f_left, text="PROJE ADI:", font=("Segoe UI", 12, "bold")).pack(side="left")
+ctk.CTkLabel(f_left, text="PROJE ADI:", font=FONT_BOLD).pack(side="left")
 entry_proje_adi = ctk.CTkEntry(f_left, width=200, placeholder_text="Yeni Proje")
 entry_proje_adi.pack(side="left", padx=10)
 
-ctk.CTkLabel(f_left, text="MÜŞTERİ:", font=("Segoe UI", 12, "bold")).pack(side="left", padx=(10, 0))
+ctk.CTkLabel(f_left, text="MÜŞTERİ:", font=FONT_BOLD).pack(side="left", padx=(10, 0))
 entry_musteri = ctk.CTkEntry(f_left, width=200, placeholder_text="Müşteri Firma")
 entry_musteri.pack(side="left", padx=10)
 
@@ -648,19 +761,24 @@ f_right.pack(side="right", padx=20)
 lbl_durum = ctk.CTkLabel(f_right, text="...", font=("Segoe UI", 14, "bold"))
 lbl_durum.pack(side="right", padx=10)
 
-entry_kur_eur = ctk.CTkEntry(f_right, width=60, justify="center"); entry_kur_eur.insert(0, "38.20"); entry_kur_eur.pack(side="right")
-ctk.CTkLabel(f_right, text="EUR", text_color="#FBC02D", font=("Segoe UI", 12, "bold")).pack(side="right", padx=5)
+# Kurlar (Düzeltilmiş ve Temiz)
+entry_kur_eur = ctk.CTkEntry(f_right, width=60, justify="center")
+entry_kur_eur.insert(0, "38.20")
+entry_kur_eur.pack(side="right")
+ctk.CTkLabel(f_right, text="EUR", text_color="#FBC02D", font=FONT_BOLD).pack(side="right", padx=5)
 
-entry_kur_usd = ctk.CTkEntry(f_right, width=60, justify="center"); entry_kur_usd.insert(0, "35.50"); entry_kur_usd.pack(side="right")
-ctk.CTkLabel(f_right, text="USD", text_color="#00E676", font=("Segoe UI", 12, "bold")).pack(side="right", padx=5)
+entry_kur_usd = ctk.CTkEntry(f_right, width=60, justify="center")
+entry_kur_usd.insert(0, "35.50")
+entry_kur_usd.pack(side="right")
+ctk.CTkLabel(f_right, text="USD", text_color="#00E676", font=FONT_BOLD).pack(side="right", padx=5)
 
 f_center = ctk.CTkFrame(frame_head, fg_color="transparent")
 f_center.pack(side="left", expand=True)
-ctk.CTkLabel(f_center, text="Oto Kayıt:", font=("Segoe UI", 12, "bold")).pack(side="left", padx=5)
+ctk.CTkLabel(f_center, text="Oto Kayıt:", font=FONT_BOLD).pack(side="left", padx=5)
 cmb_oto_kayit = ctk.CTkComboBox(f_center, values=["Kapalı", "30 Saniye", "1 Dakika", "2 Dakika", "5 Dakika"], width=120, command=oto_kayit_ayar_degisti)
 cmb_oto_kayit.pack(side="left")
 
-# Input Alanı
+# --- GİRİŞ PANELLERİ ---
 frame_input = ctk.CTkFrame(app, fg_color="transparent")
 frame_input.pack(fill="x", padx=15, pady=10)
 
@@ -669,11 +787,11 @@ def create_card(parent, title):
     ctk.CTkLabel(f, text=title, font=("Segoe UI", 13, "bold"), text_color="gray").pack(anchor="w", padx=10, pady=5)
     return f
 
-# Panel 1: Malzeme
-p1 = create_card(frame_input, "1. Malzeme & Hammadde")
-p1.pack(side="left", fill="both", expand=True, padx=(0,10))
+# 1. Malzeme Paneli
+p_malzeme = create_card(frame_input, "1. Malzeme & Hammadde")
+p_malzeme.pack(side="left", fill="both", expand=True, padx=(0,10))
 
-grid_f = ctk.CTkFrame(p1, fg_color="transparent")
+grid_f = ctk.CTkFrame(p_malzeme, fg_color="transparent")
 grid_f.pack(fill="both", expand=True, padx=10, pady=5)
 
 ctk.CTkLabel(grid_f, text="Kategori:").grid(row=0, column=0, sticky="e", pady=5)
@@ -683,8 +801,9 @@ var_manuel = tk.IntVar()
 ctk.CTkCheckBox(grid_f, text="Elle Yaz", variable=var_manuel, command=manuel_mod_kontrol, width=20, height=20).grid(row=0, column=2, sticky="w", padx=5)
 
 ctk.CTkLabel(grid_f, text="Ürün:").grid(row=1, column=0, sticky="e", pady=5)
-cmb_urun = ctk.CTkComboBox(grid_f, width=250); cmb_urun.grid(row=1, column=1, columnspan=2, sticky="w", padx=5)
-ctk.CTkButton(grid_f, text="X", width=30, fg_color="#D32F2F", hover_color="#B71C1C", command=listeden_sil_buton).grid(row=1, column=3, padx=5)
+cmb_urun = ctk.CTkComboBox(grid_f, width=250)
+cmb_urun.grid(row=1, column=1, columnspan=2, sticky="w", padx=5)
+ctk.CTkButton(grid_f, text="X", width=30, fg_color=COLOR_DANGER, hover_color="#B71C1C", command=listeden_sil_buton).grid(row=1, column=3, padx=5)
 
 ctk.CTkLabel(grid_f, text="Miktar/Fiyat:").grid(row=2, column=0, sticky="e", pady=5)
 sub_f1 = ctk.CTkFrame(grid_f, fg_color="transparent")
@@ -694,14 +813,14 @@ cmb_birim = ctk.CTkComboBox(sub_f1, values=["Adet", "Kg", "Mt", "Tk", "Lt"], wid
 entry_fiyat = ctk.CTkEntry(sub_f1, width=80, justify="right", placeholder_text="B.Fiyat"); entry_fiyat.pack(side="left", padx=5)
 cmb_para = ctk.CTkComboBox(sub_f1, values=["TL", "USD", "EUR"], width=70); cmb_para.pack(side="left")
 
-ctk.CTkButton(p1, text="LİSTEYE EKLE (+)", fg_color="#1976D2", hover_color="#1565C0", command=malzeme_ekle).pack(fill="x", padx=10, pady=10)
-kategori_degisti(None) # Başlangıçta doldur
+ctk.CTkButton(p_malzeme, text="LİSTEYE EKLE (+)", fg_color=COLOR_PRIMARY, hover_color="#1565C0", command=malzeme_ekle).pack(fill="x", padx=10, pady=10)
+kategori_degisti(None) 
 
-# Panel 2: Fason
-p2 = create_card(frame_input, "2. Dış Hizmet / Fason")
-p2.pack(side="left", fill="both", expand=True, padx=(0,10))
+# 2. Fason Paneli
+p_fason = create_card(frame_input, "2. Dış Hizmet / Fason")
+p_fason.pack(side="left", fill="both", expand=True, padx=(0,10))
 
-grid_f2 = ctk.CTkFrame(p2, fg_color="transparent")
+grid_f2 = ctk.CTkFrame(p_fason, fg_color="transparent")
 grid_f2.pack(fill="both", expand=True, padx=10, pady=5)
 
 ctk.CTkLabel(grid_f2, text="İşlem:").grid(row=0, column=0, sticky="e", pady=5)
@@ -717,13 +836,13 @@ sub_f2.grid(row=2, column=1, sticky="w")
 entry_oto_fiyat = ctk.CTkEntry(sub_f2, width=80, justify="right"); entry_oto_fiyat.pack(side="left", padx=5)
 cmb_oto_para = ctk.CTkComboBox(sub_f2, values=["TL", "USD", "EUR"], width=70); cmb_oto_para.pack(side="left")
 
-ctk.CTkButton(p2, text="EKLE (+)", fg_color="#1976D2", hover_color="#1565C0", command=otomasyon_ekle).pack(fill="x", padx=10, pady=10)
+ctk.CTkButton(p_fason, text="EKLE (+)", fg_color=COLOR_PRIMARY, hover_color="#1565C0", command=otomasyon_ekle).pack(fill="x", padx=10, pady=10)
 
-# Panel 3: İşçilik
-p3 = create_card(frame_input, "3. Atölye İşçilik")
-p3.pack(side="left", fill="both", expand=True)
+# 3. İşçilik Paneli
+p_iscilik = create_card(frame_input, "3. Atölye İşçilik")
+p_iscilik.pack(side="left", fill="both", expand=True)
 
-grid_f3 = ctk.CTkFrame(p3, fg_color="transparent")
+grid_f3 = ctk.CTkFrame(p_iscilik, fg_color="transparent")
 grid_f3.pack(fill="both", expand=True, padx=10, pady=5)
 
 ctk.CTkLabel(grid_f3, text="Kişi Sayısı:").grid(row=0, column=0, sticky="e", pady=5)
@@ -738,7 +857,7 @@ sub_f3.grid(row=2, column=1, sticky="w")
 entry_isci_ucret = ctk.CTkEntry(sub_f3, width=80, justify="right"); entry_isci_ucret.insert(0, "1100"); entry_isci_ucret.pack(side="left", padx=5)
 cmb_isci_para = ctk.CTkComboBox(sub_f3, values=["TL", "USD", "EUR"], width=70); cmb_isci_para.pack(side="left")
 
-ctk.CTkButton(p3, text="EKLE (+)", fg_color="#1976D2", hover_color="#1565C0", command=iscelik_ekle).pack(fill="x", padx=10, pady=10)
+ctk.CTkButton(p_iscilik, text="EKLE (+)", fg_color=COLOR_PRIMARY, hover_color="#1565C0", command=iscelik_ekle).pack(fill="x", padx=10, pady=10)
 
 # Butonlar ve Filtre
 f_ctrl = ctk.CTkFrame(app, fg_color="transparent")
@@ -748,21 +867,16 @@ ctk.CTkLabel(f_ctrl, text="Filtre:", font=("Segoe UI", 12, "bold")).pack(side="l
 cmb_filtre = ctk.CTkComboBox(f_ctrl, values=["Tümü", "Sadece Malzeme", "Sadece İşçilik", "Sadece Dış Hizmet"], command=lambda e: tabloyu_guncelle())
 cmb_filtre.pack(side="left", padx=10)
 
-# --- PROFESYONEL BUTON GRUBU (TEK RENK) ---
-# Kurumsal Renkler
-COL_PRIMARY = "#1976D2"   # Mavi (Ana İşlemler)
-COL_SECONDARY = "#546E7A" # Gri (Navigasyon)
-COL_DANGER = "#D32F2F"    # Kırmızı (Silme/Sıfırlama)
-
+# Buton Grubu (Profesyonel Renkler)
 btns = [
-    ("Klasörü Aç", dosya_konumunu_ac, COL_SECONDARY),
-    ("Projeyi Yükle", projeyi_yukle, COL_SECONDARY),
-    ("Teklif Geçmişi", gecmisi_goster, COL_SECONDARY),
-    ("Projeyi Kaydet", lambda: projeyi_kaydet(False), COL_PRIMARY),
-    ("PDF Oluştur", pdf_olustur_ve_ac, COL_PRIMARY),
-    ("Excel Oluştur", excele_aktar, COL_PRIMARY),
-    ("Sıfırla", sifirla, COL_DANGER),
-    ("Sil", sil, COL_DANGER)
+    ("Klasörü Aç", dosya_konumunu_ac, COLOR_SECONDARY),
+    ("Projeyi Yükle", projeyi_yukle, COLOR_SECONDARY),
+    ("Teklif Geçmişi", gecmisi_goster, COLOR_SECONDARY),
+    ("Projeyi Kaydet", lambda: projeyi_kaydet(False), COLOR_PRIMARY),
+    ("PDF Oluştur", pdf_olustur_ve_ac, COLOR_PRIMARY),
+    ("Excel Oluştur", excele_aktar, COLOR_PRIMARY),
+    ("Sıfırla", sifirla, COLOR_DANGER),
+    ("Sil", sil, COLOR_DANGER)
 ]
 
 for txt, cmd, col in reversed(btns):
