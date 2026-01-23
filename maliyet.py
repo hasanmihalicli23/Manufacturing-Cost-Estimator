@@ -2,13 +2,14 @@
 ================================================================================
 PROJE: Maliyet Analizi ve Otomatik Teklif Sistemi
 YAZAR: Hasan Mihalıçlı
-SÜRÜM: 1.3.0 (Final Stable - Order Fix)
+SÜRÜM: 1.6.0 (Final Design: Icons + Layout Fix)
 TARİH: Ocak 2026
 
 AÇIKLAMA:
-- Fonksiyon tanımlama sırası düzeltildi (NameError giderildi).
-- Önce mantık fonksiyonları, sonra arayüz çizimi gelir.
-- Akıllı kayıt ve EXE özellikleri aktiftir.
+- 'headers' NameError hatası giderildi.
+- ÜST TOOLBAR: Sola yaslı, ikonlu (Kaydet, PDF vb.)
+- ALT KONTROL: Kırmızı butonlar Filtre satırının sağında.
+- SCROLL: Küçük ekranlar için kaydırma özelliği aktif.
 ================================================================================
 """
 
@@ -44,6 +45,7 @@ CTK_APPEARANCE = "Dark"
 APP_TITLE = "Teklif Hazırlama ve Maliyet Analizi"
 FONT_MAIN = ("Segoe UI", 12)
 FONT_BOLD = ("Segoe UI", 12, "bold")
+FONT_ICON = ("Segoe UI Emoji", 20) # İkonlar için
 
 COLOR_PRIMARY = "#1976D2"
 COLOR_SECONDARY = "#546E7A"
@@ -103,7 +105,7 @@ def katalog_yukle():
 
 katalog = katalog_yukle()
 
-# --- 4. İŞ MANTIĞI VE GUI FONKSİYONLARI (Arayüzden Önce Tanımlanmalı) ---
+# --- 4. İŞ MANTIĞI VE GUI FONKSİYONLARI ---
 
 def tcmb_kur_getir():
     try:
@@ -151,7 +153,7 @@ def hesapla():
         lbl_satis_toplam_val.configure(text=format_kur_goster(satis_toplam, kur_usd, kur_eur))
         lbl_tl_teklif_val.configure(text=format_kur_goster(satis_toplam, kur_usd, kur_eur))
         lbl_tl_kdvli_val.configure(text=format_kur_goster(satis_toplam * (1 + kdv/100), kur_usd, kur_eur))
-    except: pass # İlk açılışta hata vermemesi için pass geçilebilir veya messagebox
+    except: pass 
 
 def tabloyu_guncelle():
     for i in tablo.get_children(): tablo.delete(i)
@@ -359,12 +361,18 @@ def sirala(col, reverse):
 ctk.set_appearance_mode(CTK_APPEARANCE); ctk.set_default_color_theme(CTK_THEME); ctk.set_widget_scaling(1.0)
 app = ctk.CTk(); app.title(APP_TITLE)
 app.after(0, lambda: app.state('zoomed') if os.name == 'nt' else app.geometry("1200x800"))
+
+# ANA SCROLL FRAME
+main_scroll = ctk.CTkScrollableFrame(app, width=1000, height=800, corner_radius=0, fg_color="transparent")
+main_scroll.pack(fill="both", expand=True)
+
 style = ttk.Style(); style.theme_use("clam")
 style.configure("Treeview", background="#2b2b2b", foreground="white", fieldbackground="#2b2b2b", rowheight=30, font=("Segoe UI", 10))
 style.configure("Treeview.Heading", background="#1f1f1f", foreground="white", relief="flat", font=("Segoe UI", 11, "bold"))
 style.map("Treeview", background=[('selected', '#1f538d')]) 
 
-frame_head = ctk.CTkFrame(app, corner_radius=0); frame_head.pack(fill="x")
+# 1. ÜST BAŞLIK (Proje & Müşteri)
+frame_head = ctk.CTkFrame(main_scroll, corner_radius=0); frame_head.pack(fill="x")
 f_left = ctk.CTkFrame(frame_head, fg_color="transparent"); f_left.pack(side="left", padx=20, pady=15)
 ctk.CTkLabel(f_left, text="PROJE ADI:", font=FONT_BOLD).pack(side="left")
 entry_proje_adi = ctk.CTkEntry(f_left, width=200, placeholder_text="Yeni Proje"); entry_proje_adi.pack(side="left", padx=10)
@@ -380,7 +388,22 @@ f_center = ctk.CTkFrame(frame_head, fg_color="transparent"); f_center.pack(side=
 ctk.CTkLabel(f_center, text="Oto Kayıt:", font=FONT_BOLD).pack(side="left", padx=5)
 cmb_oto_kayit = ctk.CTkComboBox(f_center, values=["Kapalı", "30 Saniye", "1 Dakika", "2 Dakika", "5 Dakika"], width=120, command=oto_kayit_ayar_degisti); cmb_oto_kayit.pack(side="left")
 
-frame_input = ctk.CTkFrame(app, fg_color="transparent"); frame_input.pack(fill="x", padx=15, pady=10)
+# --- YENİ TOOLBAR (Sola Yaslı, İkonlu) ---
+frame_toolbar = ctk.CTkFrame(main_scroll, fg_color="transparent")
+frame_toolbar.pack(fill="x", padx=20, pady=(5, 0)) 
+
+top_btns = [
+    ("📂", projeyi_yukle, COLOR_SECONDARY),
+    ("💾", lambda: projeyi_kaydet(False), COLOR_PRIMARY),
+    ("📄", pdf_olustur_ve_ac, COLOR_PRIMARY),
+    ("📊", excele_aktar, COLOR_PRIMARY)
+]
+
+for icon, cmd, col in top_btns:
+    ctk.CTkButton(frame_toolbar, text=icon, command=cmd, fg_color=col, width=50, height=40, font=FONT_ICON).pack(side="left", padx=(0, 10))
+
+# 2. GİRİŞ PANELLERİ
+frame_input = ctk.CTkFrame(main_scroll, fg_color="transparent"); frame_input.pack(fill="x", padx=15, pady=10)
 
 p_malzeme = create_card(frame_input, "1. Malzeme & Hammadde"); p_malzeme.pack(side="left", fill="both", expand=True, padx=(0,10))
 grid_f = ctk.CTkFrame(p_malzeme, fg_color="transparent"); grid_f.pack(fill="both", expand=True, padx=10, pady=5)
@@ -420,24 +443,35 @@ entry_isci_ucret = ctk.CTkEntry(sub_f3, width=80, justify="right"); entry_isci_u
 cmb_isci_para = ctk.CTkComboBox(sub_f3, values=["TL", "USD", "EUR"], width=70); cmb_isci_para.pack(side="left")
 ctk.CTkButton(p_iscilik, text="EKLE (+)", fg_color=COLOR_PRIMARY, hover_color="#1565C0", command=iscelik_ekle).pack(fill="x", padx=10, pady=10)
 
-f_ctrl = ctk.CTkFrame(app, fg_color="transparent"); f_ctrl.pack(fill="x", padx=15, pady=5)
+# 3. LİSTE VE FİLTRE (Kırmızı Butonlar Sağda)
+f_ctrl = ctk.CTkFrame(main_scroll, fg_color="transparent"); f_ctrl.pack(fill="x", padx=15, pady=5)
+
 ctk.CTkLabel(f_ctrl, text="Filtre:", font=("Segoe UI", 12, "bold")).pack(side="left")
 cmb_filtre = ctk.CTkComboBox(f_ctrl, values=["Tümü", "Sadece Malzeme", "Sadece İşçilik", "Sadece Dış Hizmet"], command=lambda e: tabloyu_guncelle()); cmb_filtre.pack(side="left", padx=10)
-btns = [("Projeyi Aç", projeyi_yukle, COLOR_SECONDARY), ("Kaydet", lambda: projeyi_kaydet(False), COLOR_PRIMARY), 
-        ("PDF", pdf_olustur_ve_ac, COLOR_PRIMARY), ("Excel", excele_aktar, COLOR_PRIMARY), ("Sıfırla", sifirla, COLOR_DANGER), ("Satır Sil", sil, COLOR_DANGER)]
-for txt, cmd, col in reversed(btns): ctk.CTkButton(f_ctrl, text=txt, command=cmd, fg_color=col, width=90, height=32, font=("Segoe UI", 12, "bold")).pack(side="right", padx=5)
 
-f_list = ctk.CTkFrame(app, fg_color="transparent"); f_list.pack(fill="both", expand=True, padx=15, pady=5)
+bottom_btns = [
+    ("✂️", sil, COLOR_DANGER),
+    ("🗑️", sifirla, COLOR_DANGER)
+]
+for icon, cmd, col in bottom_btns:
+    ctk.CTkButton(f_ctrl, text=icon, command=cmd, fg_color=col, width=50, height=35, font=FONT_ICON).pack(side="right", padx=5)
+
+f_list = ctk.CTkFrame(main_scroll, fg_color="transparent"); f_list.pack(fill="both", expand=True, padx=15, pady=5)
 scroll = ctk.CTkScrollbar(f_list); scroll.pack(side="right", fill="y")
 cols = ("k", "u", "m", "f", "p", "t", "ht", "gbf") 
-tablo = ttk.Treeview(f_list, columns=cols, show="headings", selectmode="extended", yscrollcommand=scroll.set); tablo.pack(side="left", fill="both", expand=True)
-scroll.configure(command=tablo.yview)
 headers = ["Kategori", "Ürün / Açıklama", "Miktar", "Birim Fiyat", "Para", "Toplam Tutar", "", ""]
 widths = [150, 400, 100, 120, 80, 150, 0, 0]
-for c, t, w in zip(cols, headers, widths): tablo.heading(c, text=t, command=lambda x=c: sirala(x, False)); tablo.column(c, width=w, anchor="w" if c in ["k","u"] else "center")
+
+tablo = ttk.Treeview(f_list, columns=cols, show="headings", selectmode="extended", yscrollcommand=scroll.set, height=10); tablo.pack(side="left", fill="both", expand=True)
+scroll.configure(command=tablo.yview)
+
+# Headers tanımlı olduğu için artık hata vermez
+for c, t, w in zip(cols, headers, widths): 
+    tablo.heading(c, text=t, command=lambda x=c: sirala(x, False))
+    tablo.column(c, width=w, anchor="w" if c in ["k","u"] else "center")
 tablo.column("ht", width=0, stretch=False); tablo.column("gbf", width=0, stretch=False)
 
-f_foot = ctk.CTkFrame(app, height=100); f_foot.pack(fill="x", padx=15, pady=15, side="bottom")
+f_foot = ctk.CTkFrame(main_scroll, height=100); f_foot.pack(fill="x", padx=15, pady=15, side="bottom")
 f_calc = ctk.CTkFrame(f_foot, fg_color="transparent"); f_calc.pack(side="left", padx=20, pady=10)
 ctk.CTkLabel(f_calc, text="Hesaplama Parametreleri", font=("Segoe UI", 12, "bold"), text_color="gray").grid(row=0, column=0, columnspan=2, sticky="w")
 ctk.CTkLabel(f_calc, text="Malzeme %:").grid(row=1, column=0, sticky="e"); entry_kar_malzeme = ctk.CTkEntry(f_calc, width=50); entry_kar_malzeme.insert(0, "30"); entry_kar_malzeme.grid(row=1, column=1, padx=5, pady=2)
